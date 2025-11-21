@@ -1,0 +1,32 @@
+# Build
+bin/
+obj/
+publish/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Generated tools
+src/LocLM/backend/local_tools/*.py
+!src/LocLM/backend/local_tools/__init__.py
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Windows reserved names
+nul
+
+# Env
+.env
+
+.claude/

@@ -1,0 +1,1146 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LocLM.ViewModels"
+        x:Class="LocLM.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="LocLM"
+        Width="1400" Height="850"
+        MinWidth="900" MinHeight="600"
+        Background="#050505"
+        CanResize="True"
+        SystemDecorations="Full"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="PreferSystemChrome"
+        ExtendClientAreaTitleBarHeightHint="38">
+
+    <Window.Styles>
+        <!-- Base text with anti-aliasing -->
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="#ededed"/>
+            <Setter Property="FontFamily" Value="Inter, Segoe UI, sans-serif"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="TextWrapping" Value="NoWrap"/>
+        </Style>
+
+        <!-- Monospace -->
+        <Style Selector="TextBlock.mono">
+            <Setter Property="FontFamily" Value="JetBrains Mono, Cascadia Code, Consolas, monospace"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
+        <!-- Secondary -->
+        <Style Selector="TextBlock.secondary">
+            <Setter Property="Foreground" Value="#888888"/>
+        </Style>
+
+        <!-- Muted / Labels - Technical uppercase with tracking -->
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#404040"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="LetterSpacing" Value="2"/>
+        </Style>
+
+        <!-- Sidebar item -->
+        <Style Selector="Button.sidebar-item">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#737373"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="Button.sidebar-item:pointerover">
+            <Setter Property="Background" Value="#ffffff08"/>
+            <Setter Property="Foreground" Value="#ededed"/>
+        </Style>
+        <Style Selector="Button.sidebar-item:pressed">
+            <Setter Property="Background" Value="#ffffff10"/>
+            <Setter Property="Foreground" Value="#ededed"/>
+        </Style>
+
+        <!-- Ghost button -->
+        <Style Selector="Button.ghost">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#737373"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="Button.ghost:pointerover">
+            <Setter Property="Background" Value="#ffffff08"/>
+            <Setter Property="Foreground" Value="#ededed"/>
+        </Style>
+        <Style Selector="Button.ghost:pressed">
+            <Setter Property="Background" Value="#ffffff10"/>
+            <Setter Property="Foreground" Value="#ededed"/>
+        </Style>
+
+        <!-- Action button - integrated style -->
+        <Style Selector="Button.action">
+            <Setter Property="Background" Value="#262626"/>
+            <Setter Property="Foreground" Value="#ededed"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+        </Style>
+        <Style Selector="Button.action:pointerover">
+            <Setter Property="Background" Value="#333333"/>
+        </Style>
+        <Style Selector="Button.action:pressed">
+            <Setter Property="Background" Value="#404040"/>
+        </Style>
+        <Style Selector="Button.action:disabled">
+            <Setter Property="Background" Value="#1a1a1a"/>
+            <Setter Property="Foreground" Value="#525252"/>
+        </Style>
+
+        <!-- Premium card - subtle bg, minimal border -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#0d0d0d"/>
+            <Setter Property="BorderBrush" Value="#ffffff08"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+        </Style>
+
+        <!-- Message row - tighter spacing -->
+        <Style Selector="Border.message-row">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="24,8"/>
+        </Style>
+        <Style Selector="Border.message-row-agent">
+            <Setter Property="Background" Value="#0a0a0a80"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="24,8"/>
+        </Style>
+
+        <!-- Tool execution -->
+        <Style Selector="Border.tool-block">
+            <Setter Property="Background" Value="#0a0f14"/>
+            <Setter Property="BorderBrush" Value="#1a2633"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="8,6"/>
+        </Style>
+
+        <!-- Input styling -->
+        <Style Selector="TextBox.command-input">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#ededed"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CaretBrush" Value="#ededed"/>
+        </Style>
+        <Style Selector="TextBox.command-input /template/ TextBlock#PART_Watermark">
+            <Setter Property="Foreground" Value="#404040"/>
+        </Style>
+
+        <!-- Status dots -->
+        <Style Selector="Ellipse.dot-active">
+            <Setter Property="Fill" Value="#22c55e"/>
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="Height" Value="6"/>
+        </Style>
+        <Style Selector="Ellipse.dot-pending">
+            <Setter Property="Fill" Value="#f59e0b"/>
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="Height" Value="6"/>
+        </Style>
+        <Style Selector="Ellipse.dot-error">
+            <Setter Property="Fill" Value="#ef4444"/>
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="Height" Value="6"/>
+        </Style>
+
+        <!-- Custom scrollbar -->
+        <Style Selector="ScrollViewer /template/ ScrollBar">
+            <Setter Property="Width" Value="8"/>
+        </Style>
+
+        <!-- Remove all focus/pressed visual artifacts -->
+        <Style Selector="Button">
+            <Setter Property="FocusAdorner" Value="{x:Null}"/>
+        </Style>
+        <Style Selector="Button:focus">
+            <Setter Property="Background" Value="{TemplateBinding Background}"/>
+        </Style>
+        <Style Selector="Button:focus /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Button /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="FocusAdorner" Value="{x:Null}"/>
+        </Style>
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+
+        <!-- Remove selection highlight colors -->
+        <Style Selector="TextBox">
+            <Setter Property="SelectionBrush" Value="#3b82f680"/>
+            <Setter Property="SelectionForegroundBrush" Value="#ededed"/>
+        </Style>
+        <!-- Menu item style -->
+        <Style Selector="Button.menu-item">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#a0a0a0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="Button.menu-item:pointerover">
+            <Setter Property="Background" Value="#ffffff10"/>
+            <Setter Property="Foreground" Value="#ededed"/>
+        </Style>
+        <Style Selector="Button.menu-item:pressed">
+            <Setter Property="Background" Value="#ffffff15"/>
+        </Style>
+
+        <!-- File explorer item style -->
+        <Style Selector="Button.file-item">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#c0c0c0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,3,8,3"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.file-item:pointerover">
+            <Setter Property="Background" Value="#1a1a1a"/>
+        </Style>
+        <Style Selector="Button.file-item:pressed">
+            <Setter Property="Background" Value="#252525"/>
+        </Style>
+        <Style Selector="Button.file-item-selected">
+            <Setter Property="Background" Value="#094771"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,3,8,3"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.file-item-selected:pointerover">
+            <Setter Property="Background" Value="#0a5280"/>
+        </Style>
+
+        <!-- View toggle tabs -->
+        <Style Selector="Button.view-tab">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#555555"/>
+            <Setter Property="BorderThickness" Value="0,0,0,2"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+        <Style Selector="Button.view-tab:pointerover">
+            <Setter Property="Background" Value="#0a0a0a"/>
+            <Setter Property="Foreground" Value="#909090"/>
+        </Style>
+        <Style Selector="Button.view-tab-active">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+            <Setter Property="BorderThickness" Value="0,0,0,2"/>
+            <Setter Property="BorderBrush" Value="#ffffff"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
+        <!-- Editor tab style -->
+        <Style Selector="Button.editor-tab">
+            <Setter Property="Background" Value="#0d0d0d"/>
+            <Setter Property="Foreground" Value="#808080"/>
+            <Setter Property="BorderThickness" Value="0,0,1,0"/>
+            <Setter Property="BorderBrush" Value="#1a1a1a"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+        <Style Selector="Button.editor-tab:pointerover">
+            <Setter Property="Background" Value="#1a1a1a"/>
+            <Setter Property="Foreground" Value="#c0c0c0"/>
+        </Style>
+
+        <!-- Tab close button -->
+        <Style Selector="Button.tab-close">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#505050"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="2"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="CornerRadius" Value="3"/>
+        </Style>
+        <Style Selector="Button.tab-close:pointerover">
+            <Setter Property="Background" Value="#333333"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+        </Style>
+    </Window.Styles>
+
+    <Panel>
+    <Grid ColumnDefinitions="220,*,260">
+        <!-- LEFT SIDEBAR - VS Code Style File Explorer -->
+        <Border Grid.Column="0" Background="#0A0A0A" BorderBrush="#1a1a1a" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="38,Auto,*,200,Auto">
+                <!-- Title Bar with Logo -->
+                <Border Grid.Row="0" Padding="12,0" Background="#0d0d0d" BorderBrush="#262626" BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Border Width="18" Height="18" CornerRadius="4" Background="#2563eb">
+                                <TextBlock Text="L" FontSize="10" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="EXPLORER" FontSize="11" FontWeight="Medium"
+                                       Foreground="#555555" LetterSpacing="1.5"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                            <Button Classes="ghost" Padding="4" Command="{Binding FileExplorer.CreateFileCommand}"
+                                    ToolTip.Tip="New File">
+                                <TextBlock Text="+" FontSize="12" Foreground="#808080"/>
+                            </Button>
+                            <Button Classes="ghost" Padding="4" Command="{Binding FileExplorer.CreateFolderCommand}"
+                                    ToolTip.Tip="New Folder">
+                                <TextBlock Text="📁" FontSize="10" Foreground="#808080"/>
+                            </Button>
+                            <Button Classes="ghost" Padding="4" Command="{Binding FileExplorer.RefreshCommand}"
+                                    ToolTip.Tip="Refresh">
+                                <TextBlock Text="⟳" FontSize="11" Foreground="#808080"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Project Header -->
+                <Border Grid.Row="1" Padding="0,0,0,0" Background="#0a0a0a">
+                    <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Padding="8,6" CornerRadius="0">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="▼" FontSize="8" Foreground="#808080" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding FileExplorer.RootName}" FontWeight="SemiBold" FontSize="11"
+                                       ToolTip.Tip="{Binding FileExplorer.RootPath}"/>
+                        </StackPanel>
+                    </Button>
+                </Border>
+
+                <!-- File Tree -->
+                <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding FileExplorer.RootItems}" Margin="0,2,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <!-- File/Folder Item -->
+                                    <Button Classes="file-item"
+                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).FileExplorer.SelectItemCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="Auto,Auto,*">
+                                            <!-- Indent -->
+                                            <Border Grid.Column="0" Width="{Binding IndentWidth}"/>
+                                            <!-- Expand/Collapse Arrow -->
+                                            <Button Grid.Column="1" Classes="ghost" Padding="2" Width="16"
+                                                    IsVisible="{Binding IsDirectory}"
+                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).FileExplorer.ToggleExpandCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock Text="{Binding Icon}" FontSize="8" Foreground="#606060"/>
+                                            </Button>
+                                            <Border Grid.Column="1" Width="16" IsVisible="{Binding !IsDirectory}"/>
+                                            <!-- File Icon and Name -->
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding FileIcon}" FontSize="12" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Name}" FontSize="12"
+                                                           Foreground="#c0c0c0" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+
+                                    <!-- Children (recursive) -->
+                                    <ItemsControl ItemsSource="{Binding Children}" IsVisible="{Binding IsExpanded}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel>
+                                                    <Button Classes="file-item"
+                                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).FileExplorer.SelectItemCommand}"
+                                                            CommandParameter="{Binding}">
+                                                        <Grid ColumnDefinitions="Auto,Auto,*">
+                                                            <Border Grid.Column="0" Width="{Binding IndentWidth}"/>
+                                                            <Button Grid.Column="1" Classes="ghost" Padding="2" Width="16"
+                                                                    IsVisible="{Binding IsDirectory}"
+                                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).FileExplorer.ToggleExpandCommand}"
+                                                                    CommandParameter="{Binding}">
+                                                                <TextBlock Text="{Binding Icon}" FontSize="8" Foreground="#606060"/>
+                                                            </Button>
+                                                            <Border Grid.Column="1" Width="16" IsVisible="{Binding !IsDirectory}"/>
+                                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding FileIcon}" FontSize="12" VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding Name}" FontSize="12"
+                                                                           Foreground="#c0c0c0" VerticalAlignment="Center"
+                                                                           TextTrimming="CharacterEllipsis"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Button>
+
+                                                    <!-- Level 2 children -->
+                                                    <ItemsControl ItemsSource="{Binding Children}" IsVisible="{Binding IsExpanded}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Button Classes="file-item"
+                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).FileExplorer.SelectItemCommand}"
+                                                                        CommandParameter="{Binding}">
+                                                                    <Grid ColumnDefinitions="Auto,Auto,*">
+                                                                        <Border Grid.Column="0" Width="{Binding IndentWidth}"/>
+                                                                        <Button Grid.Column="1" Classes="ghost" Padding="2" Width="16"
+                                                                                IsVisible="{Binding IsDirectory}"
+                                                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).FileExplorer.ToggleExpandCommand}"
+                                                                                CommandParameter="{Binding}">
+                                                                            <TextBlock Text="{Binding Icon}" FontSize="8" Foreground="#606060"/>
+                                                                        </Button>
+                                                                        <Border Grid.Column="1" Width="16" IsVisible="{Binding !IsDirectory}"/>
+                                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                                                            <TextBlock Text="{Binding FileIcon}" FontSize="12" VerticalAlignment="Center"/>
+                                                                            <TextBlock Text="{Binding Name}" FontSize="12"
+                                                                                       Foreground="#c0c0c0" VerticalAlignment="Center"
+                                                                                       TextTrimming="CharacterEllipsis"/>
+                                                                        </StackPanel>
+                                                                    </Grid>
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Chat History -->
+                <Border Grid.Row="3" BorderBrush="#1e1e1e" BorderThickness="0,1,0,0" Background="#0a0a0a">
+                    <Grid RowDefinitions="Auto,*">
+                        <!-- History Header -->
+                        <Border Grid.Row="0" Padding="8,6">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="HISTORY" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="#555555" LetterSpacing="1.5" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <!-- History List -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding ChatHistory.Sessions}" Margin="0,2,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Classes="file-item"
+                                                Command="{Binding SelectCommand}">
+                                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                                <TextBlock Grid.Column="0" Text="{Binding ModeIcon}" FontSize="12"
+                                                           VerticalAlignment="Center" Margin="4,0,8,0"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" FontSize="11"
+                                                               Foreground="#c0c0c0" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding TimeAgo}" FontSize="9"
+                                                               Foreground="#606060"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="2" Classes="ghost" Padding="4" Width="20" Height="20"
+                                                        Command="{Binding DeleteCommand}" ToolTip.Tip="Delete">
+                                                    <TextBlock Text="×" FontSize="12" Foreground="#606060"/>
+                                                </Button>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- Footer -->
+                <Border Grid.Row="4" Padding="8,6" BorderBrush="#1e1e1e" BorderThickness="0,1,0,0" Background="#0a0a0a">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Button Classes="ghost" HorizontalAlignment="Left" HorizontalContentAlignment="Left"
+                                Command="{Binding ToggleSettingsCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="⚙" FontSize="11"/>
+                                <TextBlock Text="Settings" Classes="secondary" FontSize="11"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="1" Classes="ghost" Command="{Binding ChatHistory.NewSessionCommand}"
+                                ToolTip.Tip="New Chat">
+                            <TextBlock Text="💬" FontSize="11"/>
+                        </Button>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- CENTER STAGE -->
+        <Grid Grid.Column="1" RowDefinitions="38,*,Auto">
+            <!-- Header with view toggle -->
+            <Border Grid.Row="0" Background="#000000" BorderBrush="#1a1a1a" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,0">
+                    <!-- View toggle tabs -->
+                    <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
+                        <Button Classes="view-tab-active" Command="{Binding SwitchToChatCommand}"
+                                IsVisible="{Binding !IsEditorView}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="💬" FontSize="11"/>
+                                <TextBlock Text="Chat" FontSize="11"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="view-tab" Command="{Binding SwitchToChatCommand}"
+                                IsVisible="{Binding IsEditorView}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="💬" FontSize="11"/>
+                                <TextBlock Text="Chat" FontSize="11"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="view-tab-active" Command="{Binding SwitchToEditorCommand}"
+                                IsVisible="{Binding IsEditorView}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="📝" FontSize="11"/>
+                                <TextBlock Text="Editor" FontSize="11"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="view-tab" Command="{Binding SwitchToEditorCommand}"
+                                IsVisible="{Binding !IsEditorView}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="📝" FontSize="11"/>
+                                <TextBlock Text="Editor" FontSize="11"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Model selector (center) -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Button Classes="ghost" Command="{Binding ToggleModelSelectorCommand}" Padding="6,4">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding ModelName}" Classes="mono" FontSize="11" Foreground="#737373"/>
+                                <TextBlock Text="▾" FontSize="8" Foreground="#525252" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Actions -->
+                    <Button Grid.Column="2" Classes="ghost" Command="{Binding RefreshConnectionCommand}" Content="⟳" FontSize="11"/>
+                </Grid>
+            </Border>
+
+            <!-- CHAT VIEW -->
+            <ScrollViewer Grid.Row="1" IsVisible="{Binding !IsEditorView}">
+                <StackPanel>
+                    <!-- Empty state -->
+                    <StackPanel IsVisible="{Binding !Messages.Count}"
+                                HorizontalAlignment="Center" Margin="0,80,0,0">
+                        <TextBlock Text="Ready" FontSize="16" FontWeight="Medium"
+                                   HorizontalAlignment="Center" Foreground="#525252"/>
+                        <TextBlock Text="Send a message to start"
+                                   FontSize="12" Foreground="#404040" Margin="0,6,0,0"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Messages list - Stream layout -->
+                    <ItemsControl ItemsSource="{Binding Messages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <!-- User Message -->
+                                    <Border Classes="message-row" IsVisible="{Binding IsUser}">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <!-- Avatar - simple circle -->
+                                            <Border Width="24" Height="24" CornerRadius="12" Background="#1a1a1a"
+                                                    VerticalAlignment="Top" Margin="0,0,12,0">
+                                                <Ellipse Width="10" Height="10" Fill="#404040"
+                                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <!-- Content -->
+                                            <StackPanel Grid.Column="1" Spacing="2">
+                                                <TextBlock Text="You" FontSize="11" Foreground="#666666"/>
+                                                <TextBlock Text="{Binding Content}" TextWrapping="Wrap"
+                                                           LineHeight="20" Foreground="#d4d4d4" FontSize="13"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Agent Message -->
+                                    <Border Classes="message-row-agent" IsVisible="{Binding IsAssistant}">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <!-- Gradient Avatar -->
+                                            <Border Width="24" Height="24" CornerRadius="12" VerticalAlignment="Top" Margin="0,0,12,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                        <GradientStop Color="#6366f1" Offset="0"/>
+                                                        <GradientStop Color="#8b5cf6" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                                <TextBlock Text="⚡" FontSize="10"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <!-- Content -->
+                                            <StackPanel Grid.Column="1" Spacing="2">
+                                                <TextBlock Text="Agent" FontSize="11" Foreground="#666666"/>
+                                                <TextBlock Text="{Binding Content}" TextWrapping="Wrap"
+                                                           LineHeight="20" Foreground="#e5e5e5" FontSize="13"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Tool Output -->
+                                    <Border Classes="tool-block" IsVisible="{Binding IsSystem}" Margin="68,0,24,8">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Ellipse Classes="dot-active"/>
+                                            <TextBlock Text="{Binding Content}" Classes="mono"
+                                                       TextTrimming="CharacterEllipsis" Foreground="#737373"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Error -->
+                                    <Border IsVisible="{Binding IsError}" Margin="68,0,24,8"
+                                            Background="#140808" BorderBrush="#331111" BorderThickness="1"
+                                            CornerRadius="4" Padding="10,8">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Ellipse Classes="dot-error"/>
+                                            <TextBlock Text="{Binding Content}" Foreground="#f87171"
+                                                       TextWrapping="Wrap" Classes="mono"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Loading -->
+                    <Border Classes="message-row-agent" IsVisible="{Binding IsLoading}">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Width="24" Height="24" CornerRadius="12" VerticalAlignment="Top" Margin="0,0,12,0">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="#6366f1" Offset="0"/>
+                                        <GradientStop Color="#8b5cf6" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <TextBlock Text="⚡" FontSize="10"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="Agent" FontSize="11" Foreground="#525252"/>
+                                <TextBlock Text="Thinking..." Foreground="#404040" FontSize="13"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- EDITOR VIEW -->
+            <Grid Grid.Row="1" IsVisible="{Binding IsEditorView}" RowDefinitions="Auto,*">
+                <!-- Editor Tabs -->
+                <Border Grid.Row="0" Background="#0d0d0d" BorderBrush="#262626" BorderThickness="0,0,0,1">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel Orientation="Horizontal">
+                            <ItemsControl ItemsSource="{Binding Editor.Tabs}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Classes="editor-tab"
+                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Editor.SetActiveTabCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="Auto,Auto,Auto">
+                                                <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="12" Margin="0,0,6,0"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="11"/>
+                                                <Button Grid.Column="2" Classes="tab-close" Margin="8,0,0,0"
+                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Editor.CloseTabCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <TextBlock Text="×" FontSize="12"/>
+                                                </Button>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Code Editor Area -->
+                <Grid Grid.Row="1" IsVisible="{Binding Editor.HasOpenTabs}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <!-- Line Numbers -->
+                        <Border Grid.Column="0" Background="#0a0a0a" Padding="12,8,8,8" BorderBrush="#1a1a1a" BorderThickness="0,0,1,0">
+                            <TextBlock Text="{Binding Editor.ActiveTab.LineNumbers}"
+                                       FontFamily="JetBrains Mono, Cascadia Code, Consolas, monospace"
+                                       FontSize="12" Foreground="#404040" TextAlignment="Right"
+                                       LineHeight="20"/>
+                        </Border>
+                        <!-- Code Content -->
+                        <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto">
+                            <TextBox Text="{Binding Editor.ActiveTab.Content}"
+                                     FontFamily="JetBrains Mono, Cascadia Code, Consolas, monospace"
+                                     FontSize="12" Foreground="#d4d4d4"
+                                     Background="Transparent" BorderThickness="0"
+                                     AcceptsReturn="True" AcceptsTab="True"
+                                     TextWrapping="NoWrap"
+                                     Padding="12,8" LineHeight="20"/>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+
+                <!-- Empty State -->
+                <StackPanel Grid.Row="1" IsVisible="{Binding !Editor.HasOpenTabs}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="📁" FontSize="48" HorizontalAlignment="Center" Opacity="0.3"/>
+                    <TextBlock Text="No files open" FontSize="14" Foreground="#525252" Margin="0,12,0,0"/>
+                    <TextBlock Text="Select a file from the explorer to start editing" FontSize="12" Foreground="#404040" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- INPUT - Console style, squared corners (only in chat view) -->
+            <Border Grid.Row="2" Padding="20,12,20,20" IsVisible="{Binding !IsEditorView}">
+                <Border Background="#090909" CornerRadius="8" Padding="12,12,8,8"
+                        BorderBrush="#1a1a1a" BorderThickness="1">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="*">
+                        <!-- TextBox - top aligned for multi-line feel -->
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding InputText}"
+                                 Watermark="Ask anything..."
+                                 AcceptsReturn="False"
+                                 IsEnabled="{Binding !IsLoading}"
+                                 VerticalAlignment="Top"
+                                 VerticalContentAlignment="Top"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Foreground="#ededed"
+                                 FontSize="13"
+                                 CaretBrush="#ededed"
+                                 Padding="0,0,8,0">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding SendMessageCommand}"/>
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <!-- Send button - WHITE hero button -->
+                        <Button Grid.Column="1"
+                                Command="{Binding SendMessageCommand}"
+                                IsEnabled="{Binding !IsLoading}"
+                                Background="#ffffff" Foreground="#000000"
+                                Width="32" Height="32"
+                                CornerRadius="6" Padding="0" BorderThickness="0"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Bottom">
+                            <TextBlock Text="↑" FontSize="18" FontWeight="Black"/>
+                        </Button>
+                    </Grid>
+                </Border>
+            </Border>
+        </Grid>
+
+        <!-- RIGHT SIDEBAR -->
+        <Border Grid.Column="2" Background="#0A0A0A" BorderBrush="#1a1a1a" BorderThickness="1,0,0,0">
+            <Grid RowDefinitions="38,*">
+                <!-- Header -->
+                <Border Grid.Row="0" BorderBrush="#262626" BorderThickness="0,0,0,1" Padding="12,0">
+                    <TextBlock Text="Context" FontWeight="Medium" FontSize="12" VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Content -->
+                <ScrollViewer Grid.Row="1" Padding="12,16">
+                    <StackPanel Spacing="20">
+                        <!-- Status -->
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="STATUS" Classes="label"/>
+                            <StackPanel Spacing="8">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Ellipse Classes="dot-active" IsVisible="{Binding IsConnected}" VerticalAlignment="Center"/>
+                                    <Ellipse Classes="dot-pending" IsVisible="{Binding !IsConnected}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Backend" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Ellipse Classes="dot-active" IsVisible="{Binding ModelAvailable}" VerticalAlignment="Center"/>
+                                    <Ellipse Classes="dot-error" IsVisible="{Binding !ModelAvailable}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding ProviderName}" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Tools - File tree style with icons -->
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="TOOLS" Classes="label"/>
+                            <StackPanel Spacing="4">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="📄" FontSize="10" VerticalAlignment="Center"/>
+                                    <TextBlock Text="read_file" Classes="mono" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="📝" FontSize="10" VerticalAlignment="Center"/>
+                                    <TextBlock Text="write_file" Classes="mono" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="📁" FontSize="10" VerticalAlignment="Center"/>
+                                    <TextBlock Text="list_directory" Classes="mono" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="⚡" FontSize="10" VerticalAlignment="Center"/>
+                                    <TextBlock Text="run_command" Classes="mono" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Environment -->
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="ENV" Classes="label"/>
+                            <StackPanel Orientation="Horizontal" Spacing="0">
+                                <TextBlock Text="{Binding Platform}" FontSize="11" Foreground="#a3a3a3"/>
+                                <TextBlock Text=" · Python 3.11" FontSize="11" Foreground="#a3a3a3"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+
+    <!-- MODEL SELECTOR POPUP -->
+    <Border IsVisible="{Binding IsModelSelectorOpen}"
+            Background="#00000060"
+            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+            PointerPressed="CloseModelSelector_PointerPressed">
+        <Border Background="#0f0f0f" BorderBrush="#333333" BorderThickness="1"
+                CornerRadius="8" Padding="4"
+                HorizontalAlignment="Left" VerticalAlignment="Top"
+                Margin="236,46,0,0" MinWidth="240">
+            <StackPanel Spacing="2">
+                <!-- CLOUD PROVIDERS -->
+                <TextBlock Text="CLOUD" Classes="label" Margin="12,8,12,8"/>
+                <Button Classes="menu-item" Command="{Binding SwitchToGroqCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="6" Height="6" Fill="#22c55e" VerticalAlignment="Center"/>
+                        <TextBlock Text="Groq" FontSize="11" FontWeight="Medium"/>
+                        <TextBlock Text="llama-3.3-70b" Classes="mono" FontSize="10" Foreground="#525252"/>
+                    </StackPanel>
+                </Button>
+
+                <Border Height="1" Background="#262626" Margin="8,8"/>
+
+                <!-- LOCAL (OLLAMA) -->
+                <TextBlock Text="LOCAL (OLLAMA)" Classes="label" Margin="12,4,12,8"/>
+
+                <!-- Ollama Status -->
+                <Border Margin="8,0,8,8" Padding="8" Background="#0a0a0a" CornerRadius="4">
+                    <StackPanel Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Ellipse Width="6" Height="6" Fill="#22c55e" VerticalAlignment="Center"
+                                     IsVisible="{Binding IsOllamaRunning}"/>
+                            <Ellipse Width="6" Height="6" Fill="#ef4444" VerticalAlignment="Center"
+                                     IsVisible="{Binding !IsOllamaRunning}"/>
+                            <TextBlock Text="{Binding OllamaStatus}" FontSize="10" Foreground="#737373"/>
+                        </StackPanel>
+
+                        <!-- Not installed -->
+                        <Button Classes="action" Command="{Binding OpenOllamaDownloadCommand}"
+                                Content="Download Ollama" IsVisible="{Binding !IsOllamaInstalled}"
+                                HorizontalAlignment="Stretch"/>
+
+                        <!-- Installed but not running -->
+                        <Button Classes="action" Command="{Binding StartOllamaCommand}"
+                                Content="Start Ollama"
+                                IsVisible="{Binding IsOllamaInstalled}"
+                                IsEnabled="{Binding !IsOllamaRunning}"
+                                HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Ollama Models (when running) -->
+                <StackPanel IsVisible="{Binding IsOllamaRunning}" Spacing="2">
+                    <!-- Dynamic model list -->
+                    <ItemsControl ItemsSource="{Binding OllamaModels}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Classes="menu-item" Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectOllamaModelCommand}"
+                                        CommandParameter="{Binding}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Ellipse Width="6" Height="6" Fill="#22c55e" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding}" Classes="mono" FontSize="11"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Pull model buttons -->
+                    <Button Classes="menu-item" Command="{Binding PullModelCommand}" CommandParameter="llama3.2:3b">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="+" FontSize="11" Foreground="#525252"/>
+                            <TextBlock Text="Pull llama3.2 (3B)" FontSize="11" Foreground="#525252"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="menu-item" Command="{Binding PullModelCommand}" CommandParameter="qwen2.5-coder:7b">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="+" FontSize="11" Foreground="#525252"/>
+                            <TextBlock Text="Pull qwen2.5-coder (7B)" FontSize="11" Foreground="#525252"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- Download progress -->
+                <Border IsVisible="{Binding IsDownloadingModel}" Margin="8,4" Padding="8" Background="#0a0a0a" CornerRadius="4">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding DownloadStatus}" FontSize="10" Foreground="#737373"/>
+                        <Grid>
+                            <Border Height="4" Background="#1a1a1a" CornerRadius="2"/>
+                            <ProgressBar Height="4" Minimum="0" Maximum="100" Value="{Binding DownloadProgress}"
+                                         Foreground="#3b82f6" Background="Transparent"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Height="1" Background="#262626" Margin="8,4"/>
+
+                <!-- MODE -->
+                <TextBlock Text="MODE" Classes="label" Margin="12,8,12,4"/>
+                <Button Classes="menu-item" Command="{Binding ToggleModeCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="6" Height="6" Fill="#22c55e" VerticalAlignment="Center"
+                                 IsVisible="{Binding IsChatMode}"/>
+                        <Ellipse Width="6" Height="6" Fill="#525252" VerticalAlignment="Center"
+                                 IsVisible="{Binding !IsChatMode}"/>
+                        <TextBlock Text="Chat Mode" FontSize="11"/>
+                        <TextBlock Text="(no tools)" FontSize="10" Foreground="#525252" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="menu-item" Command="{Binding ToggleModeCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="6" Height="6" Fill="#22c55e" VerticalAlignment="Center"
+                                 IsVisible="{Binding !IsChatMode}"/>
+                        <Ellipse Width="6" Height="6" Fill="#525252" VerticalAlignment="Center"
+                                 IsVisible="{Binding IsChatMode}"/>
+                        <TextBlock Text="Agent Mode" FontSize="11"/>
+                        <TextBlock Text="(with tools)" FontSize="10" Foreground="#525252" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+    </Border>
+
+    <!-- SETTINGS PANEL -->
+    <Panel IsVisible="{Binding IsSettingsOpen}">
+        <Border Background="#00000080"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                PointerPressed="CloseSettings_PointerPressed"/>
+        <Border Background="#0a0a0a" BorderBrush="#333333" BorderThickness="1"
+                CornerRadius="8" Width="400" Height="500"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid RowDefinitions="Auto,*,Auto">
+                <!-- Header -->
+                <Border Grid.Row="0" Padding="20,16" BorderBrush="#262626" BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="Settings" FontSize="16" FontWeight="SemiBold"/>
+                        <Button Grid.Column="1" Classes="ghost" Command="{Binding ToggleSettingsCommand}"
+                                Content="✕" FontSize="14"/>
+                    </Grid>
+                </Border>
+
+                <!-- Content -->
+                <ScrollViewer Grid.Row="1"
+                              VerticalScrollBarVisibility="Visible"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="24" Margin="20,16,20,16">
+                        <!-- API Configuration -->
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="API CONFIGURATION" Classes="label"/>
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Provider" FontSize="11" Foreground="#737373"/>
+                                <Border Background="#0f0f0f" CornerRadius="6" Padding="12,10"
+                                        BorderBrush="#262626" BorderThickness="1">
+                                    <TextBlock Text="{Binding ProviderName}" FontSize="12"/>
+                                </Border>
+                            </StackPanel>
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Model" FontSize="11" Foreground="#737373"/>
+                                <Border Background="#0f0f0f" CornerRadius="6" Padding="12,10"
+                                        BorderBrush="#262626" BorderThickness="1">
+                                    <TextBlock Text="{Binding ModelName}" FontSize="12" Classes="mono"/>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Connection -->
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="CONNECTION" Classes="label"/>
+                            <StackPanel Spacing="8">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Ellipse Classes="dot-active" IsVisible="{Binding IsConnected}" VerticalAlignment="Center"/>
+                                    <Ellipse Classes="dot-error" IsVisible="{Binding !IsConnected}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding ConnectionStatus}" FontSize="12"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Working Directory -->
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="WORKSPACE" Classes="label"/>
+                            <Border Background="#0f0f0f" CornerRadius="6" Padding="12,10"
+                                    BorderBrush="#262626" BorderThickness="1">
+                                <TextBlock Text="{Binding WorkingDirectory}" FontSize="11" Classes="mono"
+                                           TextWrapping="Wrap" Foreground="#a0a0a0"/>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Mode -->
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="AGENT MODE" Classes="label"/>
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <Button Classes="action" Command="{Binding ToggleModeCommand}"
+                                        Content="{Binding CurrentMode}" Width="100"/>
+                                <TextBlock Text="Toggle between chat and agent mode" FontSize="11"
+                                           Foreground="#525252" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Footer -->
+                <Border Grid.Row="2" Padding="20,12" BorderBrush="#262626" BorderThickness="0,1,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <Button Classes="ghost" Command="{Binding ToggleKeyboardShortcutsCommand}" Content="Keyboard Shortcuts" Padding="16,8"/>
+                        <Button Classes="ghost" Command="{Binding ToggleSettingsCommand}" Content="Close" Padding="16,8"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Panel>
+
+    <!-- KEYBOARD SHORTCUTS PANEL -->
+    <Border IsVisible="{Binding IsKeyboardShortcutsOpen}"
+            Background="#00000090"
+            HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        <Border Background="#0a0a0a" BorderBrush="#333333" BorderThickness="1"
+                CornerRadius="8" Width="650" Height="600"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+                <!-- Header -->
+                <Border Grid.Row="0" Padding="20,16" BorderBrush="#262626" BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Keyboard Shortcuts" FontSize="16" FontWeight="SemiBold"/>
+                            <TextBlock Text="Customize your keybindings for faster productivity" FontSize="11" Foreground="#606060"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Classes="ghost" Command="{Binding ToggleKeyboardShortcutsCommand}"
+                                Content="✕" FontSize="14"/>
+                    </Grid>
+                </Border>
+
+                <!-- Vim Mode Toggle and Status -->
+                <Border Grid.Row="1" Padding="20,12" Background="#0d0d0d">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <!-- Vim Mode Status -->
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBlock Text="Vim Mode" FontSize="11" Foreground="#808080" VerticalAlignment="Center"/>
+                            <Border Background="#1a1a1a" CornerRadius="4" Padding="8,4">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Ellipse Width="6" Height="6" Fill="#22c55e" VerticalAlignment="Center"
+                                             IsVisible="{Binding KeyboardShortcuts.IsVimEnabled}"/>
+                                    <Ellipse Width="6" Height="6" Fill="#525252" VerticalAlignment="Center"
+                                             IsVisible="{Binding !KeyboardShortcuts.IsVimEnabled}"/>
+                                    <TextBlock Text="{Binding VimMode}" FontSize="10" FontWeight="Bold"
+                                               Foreground="#22c55e" Classes="mono"
+                                               IsVisible="{Binding KeyboardShortcuts.IsVimEnabled}"/>
+                                    <TextBlock Text="OFF" FontSize="10" FontWeight="Bold"
+                                               Foreground="#525252" Classes="mono"
+                                               IsVisible="{Binding !KeyboardShortcuts.IsVimEnabled}"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Quick Reference -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Press" FontSize="10" Foreground="#505050" VerticalAlignment="Center"/>
+                            <Border Background="#1a1a1a" CornerRadius="3" Padding="6,3">
+                                <TextBlock Text="Esc" FontSize="9" Classes="mono" Foreground="#808080"/>
+                            </Border>
+                            <TextBlock Text="for Normal," FontSize="10" Foreground="#505050" VerticalAlignment="Center"/>
+                            <Border Background="#1a1a1a" CornerRadius="3" Padding="6,3">
+                                <TextBlock Text="i" FontSize="9" Classes="mono" Foreground="#808080"/>
+                            </Border>
+                            <TextBlock Text="for Insert" FontSize="10" Foreground="#505050" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Shortcuts List -->
+                <ScrollViewer Grid.Row="2" Padding="20,12"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="4">
+                        <!-- Group by category -->
+                        <ItemsControl ItemsSource="{Binding KeyboardShortcuts.FilteredShortcuts}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#0d0d0d" CornerRadius="4" Padding="12,10" Margin="0,2">
+                                        <Grid ColumnDefinitions="*,Auto,Auto">
+                                            <!-- Description -->
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="{Binding Description}" FontSize="12" Foreground="#d4d4d4"/>
+                                                <TextBlock Text="{Binding Category}" FontSize="9" Foreground="#505050"/>
+                                            </StackPanel>
+                                            <!-- Key Binding -->
+                                            <Border Grid.Column="1" Background="#1a1a1a" CornerRadius="4"
+                                                    Padding="10,6" Margin="12,0">
+                                                <TextBlock Text="{Binding Keys}" FontSize="11" Classes="mono"
+                                                           Foreground="#a0a0a0"/>
+                                            </Border>
+                                            <!-- Edit Button -->
+                                            <Button Grid.Column="2" Classes="ghost" Padding="6,4"
+                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).KeyboardShortcuts.StartEditingCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock Text="Edit" FontSize="10" Foreground="#606060"/>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Footer -->
+                <Border Grid.Row="3" Padding="20,12" BorderBrush="#262626" BorderThickness="0,1,0,0">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Button Classes="ghost" Command="{Binding KeyboardShortcuts.ResetToDefaultsCommand}"
+                                Content="Reset to Defaults" Padding="12,8"/>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                            <Button Classes="ghost" Command="{Binding ToggleKeyboardShortcutsCommand}"
+                                    Content="Close" Padding="16,8"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Border>
+    </Panel>
+</Window>
