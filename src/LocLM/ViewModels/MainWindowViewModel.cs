@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -141,7 +142,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Set platform info
         Platform = OperatingSystem.IsWindows() ? "Windows" :
                    OperatingSystem.IsLinux() ? "Linux" : "macOS";
-        WorkingDirectory = Environment.CurrentDirectory;
+        WorkingDirectory = FindWorkspaceRoot() ?? Environment.CurrentDirectory;
 
         _pythonBackend.OnLog += log => System.Diagnostics.Debug.WriteLine($"[Python] {log}");
         _pythonBackend.OnError += err => System.Diagnostics.Debug.WriteLine($"[Python Error] {err}");
@@ -158,6 +159,20 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Load current directory in file explorer
         _ = FileExplorer.LoadDirectoryAsync(WorkingDirectory);
+    }
+
+    private static string? FindWorkspaceRoot()
+    {
+        // Try to anchor the explorer to the solution root (LocLM.sln) if we're running from bin/Debug
+        var dir = new DirectoryInfo(Environment.CurrentDirectory);
+        while (dir != null)
+        {
+            var sln = Path.Combine(dir.FullName, "LocLM.sln");
+            if (File.Exists(sln))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+        return null;
     }
 
     private async Task CheckConnectionLoop()
