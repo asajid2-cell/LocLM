@@ -185,6 +185,7 @@
         <Style Selector="ScrollViewer /template/ ScrollBar">
             <Setter Property="Width" Value="4"/>
             <Setter Property="Opacity" Value="0.25"/>
+            <Setter Property="Background" Value="Transparent"/>
         </Style>
         <Style Selector="ScrollViewer /template/ ScrollBar:pointerover">
             <Setter Property="Opacity" Value="0.6"/>
@@ -252,15 +253,18 @@
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
         <Style Selector="Button.file-item:pointerover">
-            <Setter Property="Background" Value="#1a1a1a"/>
+            <Setter Property="Background" Value="#ffffff08"/>
+            <Setter Property="BorderBrush" Value="#7C9CFF33"/>
+            <Setter Property="BorderThickness" Value="3,0,0,0"/>
         </Style>
         <Style Selector="Button.file-item:pressed">
             <Setter Property="Background" Value="#252525"/>
         </Style>
         <Style Selector="Button.file-item-selected">
-            <Setter Property="Background" Value="#094771"/>
+            <Setter Property="Background" Value="#ffffff10"/>
             <Setter Property="Foreground" Value="#ffffff"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderThickness" Value="3,0,0,0"/>
+            <Setter Property="BorderBrush" Value="#7C9CFF"/>
             <Setter Property="Padding" Value="4,3,8,3"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
@@ -792,41 +796,75 @@
                         <!-- Status -->
                         <StackPanel Spacing="12">
                             <TextBlock Text="STATUS" Classes="label"/>
-                            <StackPanel Spacing="8">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Ellipse Classes="dot-active" IsVisible="{Binding IsConnected}" VerticalAlignment="Center"/>
-                                    <Ellipse Classes="dot-pending" IsVisible="{Binding !IsConnected}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Backend" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Ellipse Classes="dot-active" IsVisible="{Binding ModelAvailable}" VerticalAlignment="Center"/>
-                                    <Ellipse Classes="dot-error" IsVisible="{Binding !ModelAvailable}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding ProviderName}" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </StackPanel>
+                            <UniformGrid Columns="2">
+                                <Border Background="#181818" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Ellipse Classes="dot-active" IsVisible="{Binding IsConnected}" VerticalAlignment="Center"/>
+                                            <Ellipse Classes="dot-error" IsVisible="{Binding !IsConnected}" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Backend" FontSize="11" Foreground="#d4d4d4" FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding ConnectionStatus}" FontSize="10" Foreground="#7a7a7a"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="#181818" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Ellipse Classes="dot-active" IsVisible="{Binding ModelAvailable}" VerticalAlignment="Center"/>
+                                            <Ellipse Classes="dot-error" IsVisible="{Binding !ModelAvailable}" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding ProviderName}" FontSize="11" Foreground="#d4d4d4" FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding ModelName}" Classes="mono" FontSize="10" Foreground="#7a7a7a"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="#181818" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Ellipse Classes="dot-active" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Workspace" FontSize="11" Foreground="#d4d4d4" FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Platform}" FontSize="10" Foreground="#7a7a7a"/>
+                                        <TextBlock Text="{Binding WorkingDirectory}" FontSize="10" Foreground="#585858" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </Border>
+                            </UniformGrid>
                         </StackPanel>
 
-                        <!-- Tools - File tree style with icons -->
+                        <!-- Tools - pill cards -->
                         <StackPanel Spacing="12">
                             <TextBlock Text="TOOLS" Classes="label"/>
-                            <StackPanel Spacing="4">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="📄" FontSize="10" VerticalAlignment="Center"/>
-                                    <TextBlock Text="read_file" Classes="mono" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="📝" FontSize="10" VerticalAlignment="Center"/>
-                                    <TextBlock Text="write_file" Classes="mono" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="📁" FontSize="10" VerticalAlignment="Center"/>
-                                    <TextBlock Text="list_directory" Classes="mono" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="⚡" FontSize="10" VerticalAlignment="Center"/>
-                                    <TextBlock Text="run_command" Classes="mono" FontSize="11" Foreground="#d4d4d4" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </StackPanel>
+                            <WrapPanel>
+                                <Border Background="#181818" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="12" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="📄" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="read_file" Classes="mono" FontSize="11" Foreground="#d4d4d4"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="#181818" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="12" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="📝" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="write_file" Classes="mono" FontSize="11" Foreground="#d4d4d4"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="#181818" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="12" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="📁" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="list_directory" Classes="mono" FontSize="11" Foreground="#d4d4d4"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="#181818" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="12" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="⚡" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="run_command" Classes="mono" FontSize="11" Foreground="#d4d4d4"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="#181818" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="12" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="🧰" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="list_tools" Classes="mono" FontSize="11" Foreground="#d4d4d4"/>
+                                    </StackPanel>
+                                </Border>
+                            </WrapPanel>
                         </StackPanel>
 
                         <!-- Environment -->
