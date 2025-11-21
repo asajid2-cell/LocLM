@@ -168,7 +168,7 @@ public partial class FileTreeItem : ObservableObject
     public string Name { get; }
     public string FullPath { get; }
     public bool IsDirectory { get; }
-    public string Icon => IsDirectory ? (IsExpanded ? "▼" : "▶") : "";
+    public string Icon => IsDirectory ? (IsExpanded ? "▾" : "▸") : "";
     public string FileIcon { get; }
     public int Depth { get; }
     public double IndentWidth => Depth * 16;

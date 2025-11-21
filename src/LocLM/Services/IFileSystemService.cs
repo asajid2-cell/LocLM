@@ -34,7 +34,7 @@ public class FileSystemItem
     public int Depth { get; set; }
 
     public string Icon => IsDirectory
-        ? (IsExpanded ? "📂" : "📁")
+        ? (IsExpanded ? "▾" : "▸")
         : GetFileIcon(Name);
 
     public string SizeDisplay => IsDirectory ? "" : FormatSize(Size);
@@ -44,19 +44,20 @@ public class FileSystemItem
         var ext = Path.GetExtension(name).ToLowerInvariant();
         return ext switch
         {
-            ".cs" => "🔷",
-            ".py" => "🐍",
-            ".js" or ".ts" or ".jsx" or ".tsx" => "📜",
-            ".json" => "{ }",
-            ".xml" or ".xaml" or ".axaml" => "📋",
-            ".md" => "📝",
-            ".txt" => "📄",
-            ".html" or ".htm" => "🌐",
-            ".css" or ".scss" or ".sass" => "🎨",
-            ".png" or ".jpg" or ".jpeg" or ".gif" or ".svg" or ".ico" => "🖼️",
-            ".sln" or ".csproj" => "⚙️",
-            ".gitignore" or ".git" => "🔒",
-            _ => "📄"
+            ".cs" => "CS",
+            ".py" => "PY",
+            ".js" or ".jsx" => "JS",
+            ".ts" or ".tsx" => "TS",
+            ".json" => "{}",
+            ".xml" or ".xaml" or ".axaml" => "<>",
+            ".md" => "MD",
+            ".txt" => "TXT",
+            ".html" or ".htm" => "HT",
+            ".css" or ".scss" or ".sass" => "CSS",
+            ".png" or ".jpg" or ".jpeg" or ".gif" or ".svg" or ".ico" => "IMG",
+            ".sln" or ".csproj" => "NET",
+            ".gitignore" or ".git" => "GIT",
+            _ => "FILE"
         };
     }
 
@@ -104,7 +105,6 @@ public class FileSystemService : IFileSystemService
 
             try
             {
-                // Get directories first (sorted)
                 var dirs = Directory.GetDirectories(path)
                     .Where(d => !IsHidden(d))
                     .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
@@ -121,7 +121,6 @@ public class FileSystemService : IFileSystemService
                     });
                 }
 
-                // Get files (sorted)
                 var files = Directory.GetFiles(path)
                     .Where(f => !IsHidden(f))
                     .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
@@ -141,7 +140,7 @@ public class FileSystemService : IFileSystemService
             }
             catch (UnauthorizedAccessException)
             {
-                // Skip directories we can't access
+                // Ignore directories we cannot access
             }
 
             return items;
@@ -195,11 +194,9 @@ public class FileSystemService : IFileSystemService
     private static bool IsHidden(string path)
     {
         var name = Path.GetFileName(path);
-        // Skip hidden files/folders and common excluded items
         if (name.StartsWith('.') && name != ".github")
             return true;
 
-        // Skip common build/dependency folders
         var excludedDirs = new[] { "node_modules", "bin", "obj", ".git", "__pycache__", ".vs", ".idea" };
         return excludedDirs.Contains(name, StringComparer.OrdinalIgnoreCase);
     }
