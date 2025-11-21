@@ -13,14 +13,16 @@
         ExtendClientAreaChromeHints="PreferSystemChrome"
         ExtendClientAreaTitleBarHeightHint="38">
 
-    <Window.Styles>
+    <Window.Resources>
         <!-- Theme palette -->
         <SolidColorBrush x:Key="BaseBg" Color="#0C0C0C"/>
         <SolidColorBrush x:Key="PanelBg" Color="#141414"/>
         <SolidColorBrush x:Key="SurfaceBg" Color="#1F1F1F"/>
         <SolidColorBrush x:Key="BorderSubtle" Color="#14FFFFFF"/>
         <SolidColorBrush x:Key="AccentPrimary" Color="#7C9CFF"/>
+    </Window.Resources>
 
+    <Window.Styles>
         <!-- Base text with anti-aliasing -->
         <Style Selector="TextBlock">
             <Setter Property="Foreground" Value="#ededed"/>
@@ -962,6 +964,8 @@
             </StackPanel>
         </Border>
     </Border>
+
+    </Grid>
 
     <!-- SETTINGS PANEL -->
     <Panel IsVisible="{Binding IsSettingsOpen}">
