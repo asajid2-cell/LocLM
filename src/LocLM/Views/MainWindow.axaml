@@ -6,7 +6,7 @@
         Title="LocLM"
         Width="1400" Height="850"
         MinWidth="900" MinHeight="600"
-        Background="#050505"
+        Background="#0C0C0C"
         CanResize="True"
         SystemDecorations="Full"
         ExtendClientAreaToDecorationsHint="True"
@@ -14,6 +14,13 @@
         ExtendClientAreaTitleBarHeightHint="38">
 
     <Window.Styles>
+        <!-- Theme palette -->
+        <SolidColorBrush x:Key="BaseBg" Color="#0C0C0C"/>
+        <SolidColorBrush x:Key="PanelBg" Color="#141414"/>
+        <SolidColorBrush x:Key="SurfaceBg" Color="#1F1F1F"/>
+        <SolidColorBrush x:Key="BorderSubtle" Color="#14FFFFFF"/>
+        <SolidColorBrush x:Key="AccentPrimary" Color="#7C9CFF"/>
+
         <!-- Base text with anti-aliasing -->
         <Style Selector="TextBlock">
             <Setter Property="Foreground" Value="#ededed"/>
@@ -107,16 +114,30 @@
             <Setter Property="CornerRadius" Value="6"/>
         </Style>
 
-        <!-- Message row - tighter spacing -->
+        <!-- Message row -->
         <Style Selector="Border.message-row">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="24,8"/>
+            <Setter Property="Padding" Value="16,6"/>
         </Style>
-        <Style Selector="Border.message-row-agent">
-            <Setter Property="Background" Value="#0a0a0a80"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="24,8"/>
+        <Style Selector="Border.user-bubble">
+            <Setter Property="Background" Value="#2A3455CC"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#3E4C73"/>
+            <Setter Property="Padding" Value="12,8,14,8"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#11000000" BlurRadius="8" OffsetY="2"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style Selector="Border.agent-bubble">
+            <Setter Property="Background" Value="#161616"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
+            <Setter Property="Padding" Value="12,8,14,8"/>
         </Style>
 
         <!-- Tool execution -->
@@ -160,7 +181,11 @@
 
         <!-- Custom scrollbar -->
         <Style Selector="ScrollViewer /template/ ScrollBar">
-            <Setter Property="Width" Value="8"/>
+            <Setter Property="Width" Value="4"/>
+            <Setter Property="Opacity" Value="0.25"/>
+        </Style>
+        <Style Selector="ScrollViewer /template/ ScrollBar:pointerover">
+            <Setter Property="Opacity" Value="0.6"/>
         </Style>
 
         <!-- Remove all focus/pressed visual artifacts -->
@@ -303,10 +328,10 @@
     <Panel>
     <Grid ColumnDefinitions="220,*,260">
         <!-- LEFT SIDEBAR - VS Code Style File Explorer -->
-        <Border Grid.Column="0" Background="#0A0A0A" BorderBrush="#1a1a1a" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,1,0">
             <Grid RowDefinitions="38,Auto,*,200,Auto">
                 <!-- Title Bar with Logo -->
-                <Border Grid.Row="0" Padding="12,0" Background="#0d0d0d" BorderBrush="#262626" BorderThickness="0,0,0,1">
+                <Border Grid.Row="0" Padding="12,0" Background="#161616" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1">
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Border Width="18" Height="18" CornerRadius="4" Background="#2563eb">
@@ -552,14 +577,18 @@
             <!-- CHAT VIEW -->
             <ScrollViewer Grid.Row="1" IsVisible="{Binding !IsEditorView}">
                 <StackPanel>
-                    <!-- Empty state -->
+                                        <!-- Empty state -->
                     <StackPanel IsVisible="{Binding !Messages.Count}"
-                                HorizontalAlignment="Center" Margin="0,80,0,0">
-                        <TextBlock Text="Ready" FontSize="16" FontWeight="Medium"
-                                   HorizontalAlignment="Center" Foreground="#525252"/>
-                        <TextBlock Text="Send a message to start"
-                                   FontSize="12" Foreground="#404040" Margin="0,6,0,0"
-                                   HorizontalAlignment="Center"/>
+                                HorizontalAlignment="Center" Margin="0,120,0,40"
+                                Spacing="10" Opacity="0.7">
+                        <Border Width="72" Height="72" CornerRadius="18" Background="#161616" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                                HorizontalAlignment="Center">
+                            <TextBlock Text="*" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#3E4C73"/>
+                        </Border>
+                        <TextBlock Text="Start a conversation" FontSize="16" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" Foreground="#9ca3af"/>
+                        <TextBlock Text="Ask about your codebase or run a tool" MaxWidth="320"
+                                   FontSize="12" Foreground="#606060" TextAlignment="Center"/>
                     </StackPanel>
 
                     <!-- Messages list - Stream layout -->
@@ -568,43 +597,30 @@
                             <DataTemplate>
                                 <StackPanel>
                                     <!-- User Message -->
-                                    <Border Classes="message-row" IsVisible="{Binding IsUser}">
-                                        <Grid ColumnDefinitions="Auto,*">
-                                            <!-- Avatar - simple circle -->
-                                            <Border Width="24" Height="24" CornerRadius="12" Background="#1a1a1a"
-                                                    VerticalAlignment="Top" Margin="0,0,12,0">
-                                                <Ellipse Width="10" Height="10" Fill="#404040"
-                                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Classes="message-row" IsVisible="{Binding IsUser}" HorizontalAlignment="Stretch">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Border Grid.Column="1" Classes="user-bubble" HorizontalAlignment="Right" MaxWidth="720">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="You" FontSize="11" Foreground="#cdd5ff" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding Content}" TextWrapping="Wrap"
+                                                               LineHeight="22" Foreground="#ecf0ff" FontSize="13"/>
+                                                </StackPanel>
                                             </Border>
-                                            <!-- Content -->
-                                            <StackPanel Grid.Column="1" Spacing="2">
-                                                <TextBlock Text="You" FontSize="11" Foreground="#666666"/>
-                                                <TextBlock Text="{Binding Content}" TextWrapping="Wrap"
-                                                           LineHeight="20" Foreground="#d4d4d4" FontSize="13"/>
-                                            </StackPanel>
                                         </Grid>
                                     </Border>
 
                                     <!-- Agent Message -->
-                                    <Border Classes="message-row-agent" IsVisible="{Binding IsAssistant}">
+                                    <Border Classes="message-row" IsVisible="{Binding IsAssistant}" HorizontalAlignment="Stretch">
                                         <Grid ColumnDefinitions="Auto,*">
-                                            <!-- Gradient Avatar -->
-                                            <Border Width="24" Height="24" CornerRadius="12" VerticalAlignment="Top" Margin="0,0,12,0">
-                                                <Border.Background>
-                                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                                                        <GradientStop Color="#6366f1" Offset="0"/>
-                                                        <GradientStop Color="#8b5cf6" Offset="1"/>
-                                                    </LinearGradientBrush>
-                                                </Border.Background>
-                                                <TextBlock Text="⚡" FontSize="10"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <!-- Accent rail -->
+                                            <Border Grid.Column="0" Width="4" Background="#3E4C73" CornerRadius="2" Margin="0,0,8,0"/>
+                                            <Border Grid.Column="1" Classes="agent-bubble" MaxWidth="720" HorizontalAlignment="Left">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="Agent" FontSize="11" Foreground="#9ca3af" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding Content}" TextWrapping="Wrap"
+                                                               LineHeight="22" Foreground="#f3f4f6" FontSize="13"/>
+                                                </StackPanel>
                                             </Border>
-                                            <!-- Content -->
-                                            <StackPanel Grid.Column="1" Spacing="2">
-                                                <TextBlock Text="Agent" FontSize="11" Foreground="#666666"/>
-                                                <TextBlock Text="{Binding Content}" TextWrapping="Wrap"
-                                                           LineHeight="20" Foreground="#e5e5e5" FontSize="13"/>
-                                            </StackPanel>
                                         </Grid>
                                     </Border>
 
@@ -720,48 +736,48 @@
                 </StackPanel>
             </Grid>
 
-            <!-- INPUT - Console style, squared corners (only in chat view) -->
-            <Border Grid.Row="2" Padding="20,12,20,20" IsVisible="{Binding !IsEditorView}">
-                <Border Background="#090909" CornerRadius="8" Padding="12,12,8,8"
-                        BorderBrush="#1a1a1a" BorderThickness="1">
+            <!-- INPUT - Floating glassy chat bar (only in chat view) -->
+            <Border Grid.Row="2" Padding="24,16,24,24" IsVisible="{Binding !IsEditorView}">
+                <Border Background="#161616CC" CornerRadius="12" Padding="14"
+                        BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                        BoxShadow="0 16 40 0 #00000066">
                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="*">
-                        <!-- TextBox - top aligned for multi-line feel -->
+                        <!-- TextBox - roomy, with comfortable line height -->
                         <TextBox Grid.Column="0"
                                  Text="{Binding InputText}"
                                  Watermark="Ask anything..."
                                  AcceptsReturn="False"
                                  IsEnabled="{Binding !IsLoading}"
-                                 VerticalAlignment="Top"
-                                 VerticalContentAlignment="Top"
+                                 VerticalAlignment="Center"
+                                 VerticalContentAlignment="Center"
                                  Background="Transparent"
                                  BorderThickness="0"
                                  Foreground="#ededed"
-                                 FontSize="13"
+                                 FontSize="14"
+                                 LineHeight="22"
                                  CaretBrush="#ededed"
-                                 Padding="0,0,8,0">
+                                 Padding="4,0,10,0">
                             <TextBox.KeyBindings>
                                 <KeyBinding Gesture="Enter" Command="{Binding SendMessageCommand}"/>
                             </TextBox.KeyBindings>
                         </TextBox>
-                        <!-- Send button - WHITE hero button -->
+                        <!-- Send button - tucked inside the input -->
                         <Button Grid.Column="1"
                                 Command="{Binding SendMessageCommand}"
                                 IsEnabled="{Binding !IsLoading}"
-                                Background="#ffffff" Foreground="#000000"
-                                Width="32" Height="32"
-                                CornerRadius="6" Padding="0" BorderThickness="0"
+                                Background="{StaticResource AccentPrimary}" Foreground="#0b0b0b"
+                                Width="40" Height="40"
+                                CornerRadius="10" Padding="0" BorderThickness="0"
                                 HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                Margin="8,0,0,0"
-                                VerticalAlignment="Bottom">
-                            <TextBlock Text="↑" FontSize="18" FontWeight="Black"/>
+                                Margin="12,0,0,0"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="*" FontSize="16" FontWeight="Black"/>
                         </Button>
                     </Grid>
                 </Border>
             </Border>
-        </Grid>
-
         <!-- RIGHT SIDEBAR -->
-        <Border Grid.Column="2" Background="#0A0A0A" BorderBrush="#1a1a1a" BorderThickness="1,0,0,0">
+        <Border Grid.Column="2" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1,0,0,0">
             <Grid RowDefinitions="38,*">
                 <!-- Header -->
                 <Border Grid.Row="0" BorderBrush="#262626" BorderThickness="0,0,0,1" Padding="12,0">
