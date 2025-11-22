@@ -63,9 +63,11 @@ public partial class App : Application
         services.AddSingleton<IFileSystemService, FileSystemService>();
         services.AddSingleton<IKeyboardService, KeyboardService>();
         services.AddSingleton<IChatHistoryService, ChatHistoryService>();
+        services.AddSingleton<ITerminalService, TerminalService>();
         services.AddHttpClient<IAgentService, AgentService>();
 
         // ViewModels
         services.AddTransient<MainWindowViewModel>();
+        services.AddTransient<TerminalViewModel>();
     }
 }

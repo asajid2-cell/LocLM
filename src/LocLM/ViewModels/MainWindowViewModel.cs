@@ -88,12 +88,18 @@ public partial class MainWindowViewModel : ObservableObject
     // Editor with tabs
     public EditorViewModel Editor { get; }
 
+    // Terminal Manager
+    public TerminalManagerViewModel TerminalManager { get; }
+
     // View mode: "chat" or "editor"
     [ObservableProperty]
     private string _viewMode = "chat";
 
     [ObservableProperty]
     private bool _isEditorView;
+
+    [ObservableProperty]
+    private bool _isTerminalVisible;
 
     // Keyboard shortcuts
     public KeyboardShortcutsViewModel KeyboardShortcuts { get; }
@@ -125,7 +131,10 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private bool _isRunMenuOpen;
 
-    public MainWindowViewModel(IAgentService agentService, IPythonBackendService pythonBackend, IOllamaService ollamaService, IFileSystemService fileSystem, IKeyboardService keyboardService, IChatHistoryService chatHistory)
+    [ObservableProperty]
+    private bool _isTerminalMenuOpen;
+
+    public MainWindowViewModel(IAgentService agentService, IPythonBackendService pythonBackend, IOllamaService ollamaService, IFileSystemService fileSystem, IKeyboardService keyboardService, IChatHistoryService chatHistory, ITerminalService terminal)
     {
         _agentService = agentService;
         _pythonBackend = pythonBackend;
@@ -142,6 +151,9 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Initialize editor
         Editor = new EditorViewModel(fileSystem);
+
+        // Initialize terminal manager
+        TerminalManager = new TerminalManagerViewModel(terminal);
 
         // Initialize chat history
         ChatHistory = new ChatHistoryViewModel(chatHistory, this);
@@ -206,6 +218,16 @@ public partial class MainWindowViewModel : ObservableObject
                         ModelName = modelInfo.Model;
                         ProviderName = modelInfo.Provider;
                         ModelAvailable = modelInfo.Available;
+
+                        // Update connection status based on model availability
+                        if (!ModelAvailable)
+                        {
+                            ConnectionStatus = $"Model not available";
+                        }
+                        else
+                        {
+                            ConnectionStatus = "Ready";
+                        }
 
                         CurrentMode = await _agentService.GetModeAsync();
                         IsChatMode = CurrentMode == "chat";
@@ -341,6 +363,59 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ToggleTerminal()
+    {
+        IsTerminalVisible = !IsTerminalVisible;
+    }
+
+    [RelayCommand]
+    private async Task RunCurrentFileAsync()
+    {
+        if (Editor.ActiveTab == null)
+        {
+            Messages.Add(new ChatMessage("system", "No file is currently open"));
+            return;
+        }
+
+        // Auto-save if dirty
+        if (Editor.ActiveTab.IsDirty)
+        {
+            await Editor.SaveActiveTabCommand.ExecuteAsync(null);
+        }
+
+        var filePath = Editor.ActiveTab.FilePath;
+        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+
+        // Show and focus terminal
+        IsTerminalVisible = true;
+
+        // Determine run command based on file extension
+        string? command = extension switch
+        {
+            ".py" => $"python \"{filePath}\"",
+            ".cs" => $"dotnet run \"{filePath}\"",
+            ".js" => $"node \"{filePath}\"",
+            ".ts" => $"ts-node \"{filePath}\"",
+            ".sh" => $"bash \"{filePath}\"",
+            ".ps1" => $"powershell -File \"{filePath}\"",
+            ".java" => $"java \"{filePath}\"",
+            ".rb" => $"ruby \"{filePath}\"",
+            ".go" => $"go run \"{filePath}\"",
+            _ => null
+        };
+
+        if (command != null && TerminalManager.ActiveTerminal != null)
+        {
+            TerminalManager.ActiveTerminal.CurrentCommand = command;
+            await TerminalManager.ActiveTerminal.ExecuteCommandCommand.ExecuteAsync(null);
+        }
+        else
+        {
+            Messages.Add(new ChatMessage("system", $"Unable to run {extension} files automatically"));
+        }
+    }
+
+    [RelayCommand]
     private void ToggleFileMenu()
     {
         IsFileMenuOpen = !IsFileMenuOpen;
@@ -373,6 +448,9 @@ public partial class MainWindowViewModel : ObservableObject
                 var selectedPath = folder[0].Path.LocalPath;
                 WorkingDirectory = selectedPath;
                 await FileExplorer.LoadDirectoryAsync(selectedPath);
+
+                // Set terminal working directory
+                TerminalManager.SetWorkingDirectory(selectedPath);
 
                 // Sync workspace with backend for agent tools
                 try
@@ -413,6 +491,17 @@ public partial class MainWindowViewModel : ObservableObject
         IsFileMenuOpen = false;
         IsEditMenuOpen = false;
         IsViewMenuOpen = false;
+        IsTerminalMenuOpen = false;
+    }
+
+    [RelayCommand]
+    private void ToggleTerminalMenu()
+    {
+        IsTerminalMenuOpen = !IsTerminalMenuOpen;
+        IsFileMenuOpen = false;
+        IsEditMenuOpen = false;
+        IsViewMenuOpen = false;
+        IsRunMenuOpen = false;
     }
 
     private async Task CheckOllamaStatus()
@@ -675,7 +764,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         var lines = new List<string>
         {
-            "📁 File Changes:",
+            "File Changes:",
             $"   Created: {changes.Created}",
             $"   Modified: {changes.Modified}",
             $"   Deleted: {changes.Deleted}",
@@ -684,14 +773,14 @@ public partial class MainWindowViewModel : ObservableObject
 
         foreach (var file in changes.Files)
         {
-            var icon = file.Operation.ToLower() switch
+            var prefix = file.Operation.ToLower() switch
             {
-                "create" => "✨",
-                "modify" => "📝",
-                "delete" => "🗑️",
-                _ => "•"
+                "create" => "[+]",
+                "modify" => "[*]",
+                "delete" => "[-]",
+                _ => "   "
             };
-            lines.Add($"   {icon} {file.Path}");
+            lines.Add($"   {prefix} {file.Path}");
         }
 
         return string.Join("\n", lines);

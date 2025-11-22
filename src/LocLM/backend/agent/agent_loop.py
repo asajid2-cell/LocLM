@@ -283,10 +283,32 @@ When you need to perform an action, respond with a JSON block:
         elif self.provider == "ollama":
             try:
                 async with httpx.AsyncClient() as client:
+                    # Check if Ollama server is running
                     response = await client.get(f"{self.ollama_url}/api/tags", timeout=5.0)
-                    return {"available": response.status_code == 200, "provider": "Ollama"}
-            except:
-                return {"available": False, "provider": "Ollama"}
+                    if response.status_code != 200:
+                        return {"available": False, "provider": "Ollama", "error": "Ollama server not responding"}
+
+                    # Check if the configured model is available
+                    data = response.json()
+                    models = data.get("models", [])
+                    model_names = [m.get("name", "").split(":")[0] for m in models]
+
+                    # Check if our model is in the list (handle both "qwen2.5-coder" and "qwen2.5-coder:7b")
+                    model_base = self.ollama_model.split(":")[0]
+                    model_available = any(model_base in name or name in model_base for name in model_names)
+
+                    if not model_available:
+                        return {
+                            "available": False,
+                            "provider": "Ollama",
+                            "error": f"Model '{self.ollama_model}' not found. Run: ollama pull {self.ollama_model}"
+                        }
+
+                    return {"available": True, "provider": "Ollama"}
+            except httpx.ConnectError:
+                return {"available": False, "provider": "Ollama", "error": "Cannot connect to Ollama. Run: ollama serve"}
+            except Exception as e:
+                return {"available": False, "provider": "Ollama", "error": str(e)}
 
         return {"available": False, "provider": "Unknown"}
 
@@ -436,18 +458,47 @@ When you need to perform an action, respond with a JSON block:
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(self.conversation_history)
 
+        print(f"[Ollama] Calling API at: {self.ollama_url}")
+        print(f"[Ollama] Using model: {self.ollama_model}")
+        print(f"[Ollama] Messages count: {len(messages)}")
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.ollama_url}/api/chat",
                     json={"model": self.ollama_model, "messages": messages, "stream": False},
-                    timeout=60.0
+                    timeout=120.0
                 )
+                print(f"[Ollama] Response status: {response.status_code}")
+
                 if response.status_code == 200:
-                    return response.json().get("message", {}).get("content", "")
+                    data = response.json()
+                    content = data.get("message", {}).get("content", "")
+                    if content:
+                        print(f"[Ollama] Success, response length: {len(content)}")
+                        return content
+                    else:
+                        error_msg = "Ollama returned empty response. Model may not be loaded properly."
+                        print(f"[Ollama] {error_msg}")
+                        return f"Error: {error_msg}"
+                else:
+                    error_text = response.text
+                    print(f"[Ollama] Error {response.status_code}: {error_text}")
+                    return f"Ollama API Error ({response.status_code}): {error_text[:200]}"
+
+        except httpx.ConnectError as e:
+            error_msg = f"Cannot connect to Ollama at {self.ollama_url}. Is Ollama running? Try 'ollama serve' in terminal."
+            print(f"[Ollama] Connection Error: {e}")
+            return f"Error: {error_msg}"
+        except httpx.TimeoutException as e:
+            error_msg = "Ollama request timed out. The model might be loading or the request is too complex."
+            print(f"[Ollama] Timeout Error: {e}")
+            return f"Error: {error_msg}"
         except Exception as e:
-            print(f"Ollama error: {e}")
-        return ""
+            print(f"[Ollama] Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
+            return f"Ollama Error: {str(e)}"
 
     def _extract_tool_call(self, response: str) -> dict | None:
         """Extract tool call JSON from response"""

@@ -34,7 +34,7 @@ public class FileSystemItem
     public int Depth { get; set; }
 
     public string Icon => IsDirectory
-        ? (IsExpanded ? "â–¾" : "â–¸")
+        ? (IsExpanded ? "▼" : "▶")
         : GetFileIcon(Name);
 
     public string SizeDisplay => IsDirectory ? "" : FormatSize(Size);

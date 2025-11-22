@@ -24,6 +24,7 @@
         <SolidColorBrush x:Key="TextMuted" Color="#6D7480"/>
         <conv:InvertBoolConverter x:Key="InvertBool"/>
         <conv:CountIsZeroConverter x:Key="CountIsZero"/>
+        <conv:TerminalLineTypeToColorConverter x:Key="TerminalLineTypeToColor"/>
     </Window.Resources>
     <Window.Styles>
         <Style Selector="TextBlock">
@@ -126,12 +127,13 @@
                         <Button Classes="ghost" Content="File" Padding="8,6" Command="{Binding ToggleFileMenuCommand}"/>
                         <Button Classes="ghost" Content="Edit" Padding="8,6" Command="{Binding ToggleEditMenuCommand}"/>
                         <Button Classes="ghost" Content="View" Padding="8,6" Command="{Binding ToggleViewMenuCommand}"/>
+                        <Button Classes="ghost" Content="Terminal" Padding="8,6" Command="{Binding ToggleTerminalMenuCommand}"/>
                         <Button Classes="ghost" Content="Run" Padding="8,6" Command="{Binding ToggleRunMenuCommand}"/>
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Ellipse Classes="dot-active" IsVisible="{Binding IsConnected}" VerticalAlignment="Center"/>
-                            <Ellipse Classes="dot-error" IsVisible="{Binding !IsConnected}" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding ConnectionStatus}">
+                            <Ellipse Classes="dot-active" IsVisible="{Binding ModelAvailable}" VerticalAlignment="Center"/>
+                            <Ellipse Classes="dot-error" IsVisible="{Binding !ModelAvailable}" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding ProviderName}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
                             <TextBlock Text="{Binding ModelName}" FontSize="11" Classes="mono" Foreground="{StaticResource TextMuted}"/>
                         </StackPanel>
@@ -232,7 +234,7 @@
                     </Grid>
                 </Border>
                 <Border Grid.Column="1" Background="{StaticResource BaseBg}">
-                    <Grid RowDefinitions="44,*,88">
+                    <Grid RowDefinitions="44,*,Auto,88">
                         <Border Grid.Row="0" Background="#0f1117" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="12,0">
                             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                                 <Border Background="#141722" Padding="3" CornerRadius="6" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1">
@@ -302,7 +304,8 @@
                                 <Grid IsVisible="{Binding IsEditorView}">
                                     <Grid RowDefinitions="40,*" Background="#0f1117">
                                         <Border Grid.Row="0" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1" Background="#10141c" Padding="10,0">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                                                 <Border Background="#191d28" CornerRadius="6" Padding="8,4" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1">
                                                     <TextBlock Text="Open Files" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
                                                 </Border>
@@ -316,6 +319,15 @@
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
                                             </StackPanel>
+                                            <Button Grid.Column="1" Classes="ghost" Command="{Binding RunCurrentFileCommand}"
+                                                    Padding="12,6" Margin="8,0" Background="#22c55e20" BorderBrush="#22c55e40" BorderThickness="1" CornerRadius="6"
+                                                    IsEnabled="{Binding Editor.HasOpenTabs}">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Text="▶" FontSize="11" Foreground="#22c55e" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Run" FontSize="12" Foreground="#22c55e"/>
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
                                         </Border>
                                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                                             <Grid ColumnDefinitions="40,*" Background="#0d0f15">
@@ -333,7 +345,93 @@
                                 </Grid>
                             </Grid>
                         </Border>
-                        <Border Grid.Row="2" Background="#0f1117" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,14,12,14">
+
+                        <!-- Terminal Panel -->
+                        <Border Grid.Row="2" Background="#0a0c10" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0"
+                                IsVisible="{Binding IsTerminalVisible}" Height="240">
+                            <Grid RowDefinitions="32,*,40">
+                                <!-- Terminal Header with Tabs -->
+                                <Border Grid.Row="0" Background="#0d0f15" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="10,0">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <!-- Terminal Tabs -->
+                                            <ItemsControl ItemsSource="{Binding TerminalManager.Terminals}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="4"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="{Binding IsActive, Converter={x:Null}}"
+                                                                BorderBrush="{StaticResource BorderSubtle}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="6,6,0,0"
+                                                                Padding="10,4"
+                                                                Margin="0,4,0,0">
+                                                            <Border.Background>
+                                                                <SolidColorBrush Color="{Binding IsActive, Converter={x:Null}}" Opacity="{Binding IsActive, Converter={x:Null}}"/>
+                                                            </Border.Background>
+                                                            <Grid ColumnDefinitions="Auto,Auto">
+                                                                <Button Grid.Column="0" Classes="ghost" Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).TerminalManager.SetActiveTerminalCommand}" CommandParameter="{Binding}" Padding="0" Background="Transparent">
+                                                                    <TextBlock Text="{Binding Name}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                                                                </Button>
+                                                                <Button Grid.Column="1" Classes="ghost" Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).TerminalManager.CloseTerminalCommand}" CommandParameter="{Binding}" Padding="4,0,0,0" Margin="6,0,0,0">
+                                                                    <TextBlock Text="×" FontSize="12" Foreground="{StaticResource TextMuted}"/>
+                                                                </Button>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <Button Classes="ghost" Command="{Binding TerminalManager.CreateNewTerminalCommand}" Padding="6,4" Background="#141824" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="6" ToolTip.Tip="New Terminal">
+                                                <TextBlock Text="+" FontSize="11" Foreground="{StaticResource AccentPrimary}"/>
+                                            </Button>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding TerminalManager.ActiveTerminal.WorkingDirectory}" FontSize="10" Foreground="{StaticResource TextMuted}" Classes="mono"/>
+                                            <Button Classes="ghost" Padding="4" Command="{Binding TerminalManager.ActiveTerminal.ClearCommand}" ToolTip.Tip="Clear Terminal">
+                                                <TextBlock Text="Clear" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
+                                            </Button>
+                                            <Button Classes="ghost" Padding="4" Command="{Binding ToggleTerminalCommand}" ToolTip.Tip="Close Terminal">
+                                                <TextBlock Text="×" FontSize="14" Foreground="{StaticResource TextSecondary}"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Terminal Output -->
+                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Background="#0a0c10" Padding="10,6">
+                                    <ItemsControl ItemsSource="{Binding TerminalManager.ActiveTerminal.OutputLines}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Text}" Classes="mono" FontSize="11" TextWrapping="Wrap"
+                                                          Foreground="{Binding Type, Converter={StaticResource TerminalLineTypeToColor}}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
+                                <!-- Terminal Input -->
+                                <Border Grid.Row="2" Background="#0d0f15" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="10,8">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Text=">" FontSize="11" Foreground="{StaticResource AccentPrimary}" Classes="mono" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBox Grid.Column="1" Text="{Binding TerminalManager.ActiveTerminal.CurrentCommand, Mode=TwoWay}"
+                                                 Watermark="Enter command..."
+                                                 Background="Transparent" Foreground="{StaticResource TextPrimary}"
+                                                 BorderThickness="0" Classes="mono" FontSize="11"
+                                                 IsEnabled="{Binding !TerminalManager.ActiveTerminal.IsExecuting}"
+                                                 KeyDown="TerminalInput_KeyDown"/>
+                                        <Button Grid.Column="2" Classes="ghost" Command="{Binding TerminalManager.ActiveTerminal.ExecuteCommandCommand}"
+                                                IsEnabled="{Binding !TerminalManager.ActiveTerminal.IsExecuting}" Padding="8,4" Margin="8,0,0,0">
+                                            <TextBlock Text="Run" FontSize="10" Foreground="{StaticResource AccentPrimary}"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="3" Background="#0f1117" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,14,12,14">
                             <Grid ColumnDefinitions="*,52" VerticalAlignment="Center">
                                 <TextBox Grid.Column="0" Name="InputTextBox" Text="{Binding InputText, Mode=TwoWay}"
                                          Watermark="Ask anything..." MinHeight="36" MaxHeight="120"
@@ -462,20 +560,100 @@
 
                 <!-- Settings overlay -->
                 <Border Background="#00000080" IsVisible="{Binding IsSettingsOpen}" Grid.ColumnSpan="3">
-                    <Border Width="520" Background="#0f1117" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="12" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <StackPanel Spacing="12">
-                            <TextBlock Text="Settings" FontSize="16" FontWeight="SemiBold"/>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="Mode:" Foreground="{StaticResource TextSecondary}"/>
-                                <TextBlock Text="{Binding CurrentMode}"/>
-                                <Button Classes="ghost" Command="{Binding ToggleModeCommand}"><TextBlock Text="Toggle"/></Button>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="Vim:" Foreground="{StaticResource TextSecondary}"/>
-                                <TextBlock Text="{Binding VimMode}"/>
-                            </StackPanel>
-                            <Button Classes="ghost" HorizontalAlignment="Right" Command="{Binding ToggleSettingsCommand}"><TextBlock Text="Close" Foreground="{StaticResource TextSecondary}"/></Button>
-                        </StackPanel>
+                    <Border Width="620" MaxHeight="720" Background="#0f1117" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="12" Padding="0" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid RowDefinitions="56,*,64">
+                            <!-- Header -->
+                            <Border Grid.Row="0" Background="#12141b" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="20,0" CornerRadius="12,12,0,0">
+                                <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- Content -->
+                            <ScrollViewer Grid.Row="1" Padding="20" VerticalScrollBarVisibility="Auto">
+                                <StackPanel Spacing="20">
+                                    <!-- Agent Settings -->
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Text="AGENT" Classes="label"/>
+                                        <Border Background="#12141b" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="16">
+                                            <StackPanel Spacing="12">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0" Spacing="4">
+                                                        <TextBlock Text="Agent Mode" FontSize="13" FontWeight="Medium"/>
+                                                        <TextBlock Text="Control how the AI assistant behaves" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                                                    </StackPanel>
+                                                    <Border Grid.Column="1" Background="#181b22" CornerRadius="6" Padding="10,6" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1">
+                                                        <TextBlock Text="{Binding CurrentMode}" FontSize="12" Foreground="{StaticResource TextPrimary}"/>
+                                                    </Border>
+                                                </Grid>
+                                                <Button Classes="ghost" Command="{Binding ToggleModeCommand}" HorizontalAlignment="Left" Padding="12,6" Background="#141824" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="6">
+                                                    <TextBlock Text="Toggle Mode" FontSize="11"/>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- Workspace Settings -->
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Text="WORKSPACE" Classes="label"/>
+                                        <Border Background="#12141b" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="16">
+                                            <StackPanel Spacing="12">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0" Spacing="4">
+                                                        <TextBlock Text="Working Directory" FontSize="13" FontWeight="Medium"/>
+                                                        <TextBlock Text="{Binding WorkingDirectory}" FontSize="10" Classes="mono" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Classes="ghost" Command="{Binding OpenFolderCommand}" Padding="10,6" Background="#141824" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="6">
+                                                        <TextBlock Text="Change" FontSize="11"/>
+                                                    </Button>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- Editor Settings -->
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Text="EDITOR" Classes="label"/>
+                                        <Border Background="#12141b" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="16">
+                                            <StackPanel Spacing="12">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0" Spacing="4">
+                                                        <TextBlock Text="Vim Mode" FontSize="13" FontWeight="Medium"/>
+                                                        <TextBlock Text="Current mode for vim keybindings" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                                                    </StackPanel>
+                                                    <Border Grid.Column="1" Background="#181b22" CornerRadius="6" Padding="10,6" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1">
+                                                        <TextBlock Text="{Binding VimMode}" FontSize="12" Foreground="{StaticResource TextPrimary}"/>
+                                                    </Border>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- UI Settings -->
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Text="INTERFACE" Classes="label"/>
+                                        <Border Background="#12141b" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="16">
+                                            <StackPanel Spacing="12">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0" Spacing="4">
+                                                        <TextBlock Text="Platform" FontSize="13" FontWeight="Medium"/>
+                                                        <TextBlock Text="Detected operating system" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Platform}" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- Footer -->
+                            <Border Grid.Row="2" Background="#12141b" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="20,0" CornerRadius="0,0,12,12">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Button Grid.Column="1" Classes="ghost" Command="{Binding ToggleSettingsCommand}" Padding="16,12" Background="#141824" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8">
+                                        <TextBlock Text="Close" Foreground="{StaticResource TextPrimary}"/>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </Grid>
                     </Border>
                 </Border>
 
@@ -549,6 +727,10 @@
                             <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding ToggleSidebarCommand}">
                                 <TextBlock Text="Toggle Sidebar" FontSize="12"/>
                             </Button>
+                            <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding ToggleTerminalCommand}">
+                                <TextBlock Text="Toggle Terminal" FontSize="12"/>
+                            </Button>
+                            <Border Height="1" Background="{StaticResource BorderSubtle}" Margin="4,4"/>
                             <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding SwitchToChatCommand}">
                                 <TextBlock Text="Show Chat" FontSize="12"/>
                             </Button>
@@ -559,11 +741,59 @@
                     </Border>
                 </Panel>
 
+                <!-- Terminal menu dropdown -->
+                <Panel IsVisible="{Binding IsTerminalMenuOpen}" Grid.ColumnSpan="3">
+                    <Border Background="Transparent" PointerPressed="CloseMenus_PointerPressed"/>
+                    <Border Width="240" Background="#0f1117" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="4" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="330,48,0,0">
+                        <StackPanel Spacing="2">
+                            <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding TerminalManager.CreateNewTerminalCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="New Terminal" FontSize="12"/>
+                                    <TextBlock Text="Ctrl+Shift+`" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding ToggleTerminalCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Toggle Terminal" FontSize="12"/>
+                                    <TextBlock Text="Ctrl+`" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                                </StackPanel>
+                            </Button>
+                            <Border Height="1" Background="{StaticResource BorderSubtle}" Margin="4,4"/>
+                            <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding TerminalManager.NextTerminalCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Next Terminal" FontSize="12"/>
+                                    <TextBlock Text="Ctrl+Tab" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding TerminalManager.PreviousTerminalCommand}">
+                                <TextBlock Text="Previous Terminal" FontSize="12"/>
+                            </Button>
+                            <Border Height="1" Background="{StaticResource BorderSubtle}" Margin="4,4"/>
+                            <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding TerminalManager.ActiveTerminal.ClearCommand}">
+                                <TextBlock Text="Clear Active Terminal" FontSize="12"/>
+                            </Button>
+                            <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding TerminalManager.CloseTerminalCommand}" CommandParameter="{Binding TerminalManager.ActiveTerminal}">
+                                <TextBlock Text="Close Active Terminal" FontSize="12"/>
+                            </Button>
+                            <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding TerminalManager.CloseAllTerminalsCommand}">
+                                <TextBlock Text="Close All Terminals" FontSize="12"/>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Panel>
+
                 <!-- Run menu dropdown -->
                 <Panel IsVisible="{Binding IsRunMenuOpen}" Grid.ColumnSpan="3">
                     <Border Background="Transparent" PointerPressed="CloseMenus_PointerPressed"/>
-                    <Border Width="200" Background="#0f1117" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="4" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="330,48,0,0">
+                    <Border Width="200" Background="#0f1117" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="4" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="410,48,0,0">
                         <StackPanel Spacing="2">
+                            <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding RunCurrentFileCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Run File" FontSize="12"/>
+                                    <TextBlock Text="F5" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                                </StackPanel>
+                            </Button>
+                            <Border Height="1" Background="{StaticResource BorderSubtle}" Margin="4,4"/>
                             <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Command="{Binding RefreshConnectionCommand}">
                                 <TextBlock Text="Refresh Backend" FontSize="12"/>
                             </Button>

@@ -73,6 +73,10 @@ public partial class MainWindow : Window
                     vm.ToggleKeyboardShortcutsCommand.Execute(null);
                     e.Handled = true;
                     return;
+                case Key.OemTilde: // Ctrl+`: Toggle terminal
+                    vm.ToggleTerminalCommand.Execute(null);
+                    e.Handled = true;
+                    return;
             }
 
             // Ctrl+Shift combinations
@@ -94,8 +98,20 @@ public partial class MainWindow : Window
                             e.Handled = true;
                         }
                         return;
+                    case Key.OemTilde: // Ctrl+Shift+`: New terminal
+                        vm.TerminalManager.CreateNewTerminalCommand.Execute(null);
+                        e.Handled = true;
+                        return;
                 }
             }
+        }
+
+        // F5 key - Run current file
+        if (e.Key == Key.F5)
+        {
+            vm.RunCurrentFileCommand.Execute(null);
+            e.Handled = true;
+            return;
         }
 
         // Escape key - close any open panels or exit vim modes
@@ -125,12 +141,13 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 return;
             }
-            if (vm.IsFileMenuOpen || vm.IsEditMenuOpen || vm.IsViewMenuOpen || vm.IsRunMenuOpen)
+            if (vm.IsFileMenuOpen || vm.IsEditMenuOpen || vm.IsViewMenuOpen || vm.IsRunMenuOpen || vm.IsTerminalMenuOpen)
             {
                 vm.IsFileMenuOpen = false;
                 vm.IsEditMenuOpen = false;
                 vm.IsViewMenuOpen = false;
                 vm.IsRunMenuOpen = false;
+                vm.IsTerminalMenuOpen = false;
                 e.Handled = true;
                 return;
             }
@@ -334,6 +351,7 @@ public partial class MainWindow : Window
             vm.IsEditMenuOpen = false;
             vm.IsViewMenuOpen = false;
             vm.IsRunMenuOpen = false;
+            vm.IsTerminalMenuOpen = false;
         }
     }
 
@@ -357,6 +375,18 @@ public partial class MainWindow : Window
                 vm.SendMessageCommand.Execute(null);
             }
             // Shift+Enter allows new line (default TextBox behavior)
+        }
+    }
+
+    private void TerminalInput_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+
+        // Enter executes the command
+        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            e.Handled = true;
+            vm.TerminalManager.ActiveTerminal?.ExecuteCommandCommand.Execute(null);
         }
     }
 }

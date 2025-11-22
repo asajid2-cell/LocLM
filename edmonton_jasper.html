@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edmonton Jasper Ave and 104 St</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'></script>
+    <script>
+        // Create the scene, camera, and renderer
+        var scene = new THREE.Scene();
+        var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        var renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Create the city
+        var city = new THREE.Group();
+        scene.add(city);
+
+        // Create the buildings
+        var buildingGeometry = new THREE.BoxGeometry(1, 1, 1);
+        var buildingMaterial = new THREE.MeshBasicMaterial({ color: 0x777777 });
+        var building1 = new THREE.Mesh(buildingGeometry, buildingMaterial);
+        building1.position.set(-5, 0, 0);
+        city.add(building1);
+
+        var building2 = new THREE.Mesh(buildingGeometry, buildingMaterial);
+        building2.position.set(5, 0, 0);
+        city.add(building2);
+
+        // Create the road
+        var roadGeometry = new THREE.PlaneGeometry(10, 1);
+        var roadMaterial = new THREE.MeshBasicMaterial({ color: 0x444444 });
+        var road = new THREE.Mesh(roadGeometry, roadMaterial);
+        road.rotation.x = -Math.PI / 2;
+        road.position.set(0, -1, 0);
+        city.add(road);
+
+        // Create the traffic lights
+        var trafficLightGeometry = new THREE.SphereGeometry(0.1, 32, 32);
+        var trafficLightMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        var trafficLight1 = new THREE.Mesh(trafficLightGeometry, trafficLightMaterial);
+        trafficLight1.position.set(-5, 2, 0);
+        city.add(trafficLight1);
+
+        var trafficLight2 = new THREE.Mesh(trafficLightGeometry, trafficLightMaterial);
+        trafficLight2.position.set(5, 2, 0);
+        city.add(trafficLight2);
+
+        // Create the sky
+        var skyGeometry = new THREE.SphereGeometry(100, 60, 60);
+        var skyMaterial = new THREE.MeshBasicMaterial({ color: 0x87ceeb, side: THREE.BackSide });
+        var sky = new THREE.Mesh(skyGeometry, skyMaterial);
+        scene.add(sky);
+
+        // Set the camera position
+        camera.position.set(0, 5, 10);
+
+        // Animate the scene
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
