@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
@@ -15,6 +16,7 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IOllamaService _ollamaService;
     private readonly IFileSystemService _fileSystem;
     private readonly IChatHistoryService _chatHistory;
+    private readonly System.Threading.CancellationTokenSource _cancellationTokenSource = new();
 
     [ObservableProperty]
     private string _inputText = string.Empty;
@@ -110,6 +112,18 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private int? _currentSessionId;
 
+    [ObservableProperty]
+    private bool _isFileMenuOpen;
+
+    [ObservableProperty]
+    private bool _isEditMenuOpen;
+
+    [ObservableProperty]
+    private bool _isViewMenuOpen;
+
+    [ObservableProperty]
+    private bool _isRunMenuOpen;
+
     public MainWindowViewModel(IAgentService agentService, IPythonBackendService pythonBackend, IOllamaService ollamaService, IFileSystemService fileSystem, IKeyboardService keyboardService, IChatHistoryService chatHistory)
     {
         _agentService = agentService;
@@ -142,7 +156,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Set platform info
         Platform = OperatingSystem.IsWindows() ? "Windows" :
                    OperatingSystem.IsLinux() ? "Linux" : "macOS";
-        WorkingDirectory = FindWorkspaceRoot() ?? Environment.CurrentDirectory;
+
+        // Don't load any folder by default - user will open one
+        WorkingDirectory = "No folder opened";
 
         _pythonBackend.OnLog += log => System.Diagnostics.Debug.WriteLine($"[Python] {log}");
         _pythonBackend.OnError += err => System.Diagnostics.Debug.WriteLine($"[Python Error] {err}");
@@ -156,9 +172,6 @@ public partial class MainWindowViewModel : ObservableObject
         // Check connection periodically
         _ = CheckConnectionLoop();
         _ = CheckOllamaStatus();
-
-        // Load current directory in file explorer
-        _ = FileExplorer.LoadDirectoryAsync(WorkingDirectory);
     }
 
     private static string? FindWorkspaceRoot()
@@ -177,29 +190,46 @@ public partial class MainWindowViewModel : ObservableObject
 
     private async Task CheckConnectionLoop()
     {
-        while (true)
+        try
         {
-            IsConnected = await _agentService.CheckHealthAsync();
-            ConnectionStatus = IsConnected ? "Connected" : "Connecting...";
-
-            if (IsConnected)
+            while (!_cancellationTokenSource.Token.IsCancellationRequested)
             {
-                var modelInfo = await _agentService.GetModelInfoAsync();
-                ModelName = modelInfo.Model;
-                ProviderName = modelInfo.Provider;
-                ModelAvailable = modelInfo.Available;
+                try
+                {
+                    IsConnected = await _agentService.CheckHealthAsync();
+                    ConnectionStatus = IsConnected ? "Connected" : "Connecting...";
 
-                CurrentMode = await _agentService.GetModeAsync();
-                IsChatMode = CurrentMode == "chat";
-            }
-            else
-            {
-                ModelName = "Offline";
-                ProviderName = "";
-                ModelAvailable = false;
-            }
+                    if (IsConnected)
+                    {
+                        var modelInfo = await _agentService.GetModelInfoAsync();
+                        ModelName = modelInfo.Model;
+                        ProviderName = modelInfo.Provider;
+                        ModelAvailable = modelInfo.Available;
 
-            await Task.Delay(3000);
+                        CurrentMode = await _agentService.GetModeAsync();
+                        IsChatMode = CurrentMode == "chat";
+                    }
+                    else
+                    {
+                        ModelName = "Offline";
+                        ProviderName = "";
+                        ModelAvailable = false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Don't crash on connection errors
+                    System.Diagnostics.Debug.WriteLine($"[Connection Error] {ex.Message}");
+                    IsConnected = false;
+                }
+
+                // Use cancellable delay
+                await Task.Delay(5000, _cancellationTokenSource.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal cancellation, exit gracefully
         }
     }
 
@@ -227,9 +257,21 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void NewSession()
+    public async Task NewSessionAsync()
     {
         Messages.Clear();
+        CurrentSessionId = null;
+
+        // Switch to chat view
+        ViewMode = "chat";
+        IsEditorView = false;
+
+        // Clear backend conversation history
+        try
+        {
+            await _agentService.ClearHistoryAsync();
+        }
+        catch { }
     }
 
     [RelayCommand]
@@ -274,6 +316,81 @@ public partial class MainWindowViewModel : ObservableObject
     private void SetVimMode(string mode)
     {
         KeyboardShortcuts.SetVimMode(mode);
+    }
+
+    [RelayCommand]
+    private void ToggleFileMenu()
+    {
+        IsFileMenuOpen = !IsFileMenuOpen;
+        IsEditMenuOpen = false;
+        IsViewMenuOpen = false;
+        IsRunMenuOpen = false;
+    }
+
+    [RelayCommand]
+    private async Task OpenFolderAsync()
+    {
+        // Close the file menu
+        IsFileMenuOpen = false;
+
+        // Use Avalonia's folder picker
+        var window = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+            ? desktop.MainWindow
+            : null;
+
+        if (window != null)
+        {
+            var folder = await window.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
+            {
+                Title = "Open Folder",
+                AllowMultiple = false
+            });
+
+            if (folder.Count > 0)
+            {
+                var selectedPath = folder[0].Path.LocalPath;
+                WorkingDirectory = selectedPath;
+                await FileExplorer.LoadDirectoryAsync(selectedPath);
+
+                // Sync workspace with backend for agent tools
+                try
+                {
+                    await _agentService.SetWorkspaceAsync(selectedPath);
+                    System.Diagnostics.Debug.WriteLine($"[Workspace] Set backend workspace to: {selectedPath}");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Workspace] Failed to set backend workspace: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleEditMenu()
+    {
+        IsEditMenuOpen = !IsEditMenuOpen;
+        IsFileMenuOpen = false;
+        IsViewMenuOpen = false;
+        IsRunMenuOpen = false;
+    }
+
+    [RelayCommand]
+    private void ToggleViewMenu()
+    {
+        IsViewMenuOpen = !IsViewMenuOpen;
+        IsFileMenuOpen = false;
+        IsEditMenuOpen = false;
+        IsRunMenuOpen = false;
+    }
+
+    [RelayCommand]
+    private void ToggleRunMenu()
+    {
+        IsRunMenuOpen = !IsRunMenuOpen;
+        IsFileMenuOpen = false;
+        IsEditMenuOpen = false;
+        IsViewMenuOpen = false;
     }
 
     private async Task CheckOllamaStatus()
@@ -422,16 +539,16 @@ public partial class MainWindowViewModel : ObservableObject
             var title = userMessage.Length > 50 ? userMessage.Substring(0, 50) + "..." : userMessage;
             CurrentSessionId = await _chatHistory.CreateSessionAsync(title, ModelName, CurrentMode);
 
-            // Refresh chat history list
-            await ChatHistory.LoadSessionsAsync();
+            // Only refresh once when creating new session
+            _ = ChatHistory.LoadSessionsAsync();
         }
 
         Messages.Add(new ChatMessage("user", userMessage));
 
-        // Save user message to database
+        // Save user message to database (fire and forget - don't block UI)
         if (CurrentSessionId.HasValue)
         {
-            await _chatHistory.AddMessageAsync(CurrentSessionId.Value, "user", userMessage);
+            _ = _chatHistory.AddMessageAsync(CurrentSessionId.Value, "user", userMessage);
         }
 
         IsLoading = true;
@@ -441,29 +558,40 @@ public partial class MainWindowViewModel : ObservableObject
             var response = await _agentService.SendPromptAsync(userMessage);
             Messages.Add(new ChatMessage("assistant", response.Response));
 
-            // Save assistant message to database
+            // Save assistant message to database (batch the updates)
             if (CurrentSessionId.HasValue)
             {
-                await _chatHistory.AddMessageAsync(CurrentSessionId.Value, "assistant", response.Response);
-                await _chatHistory.UpdateSessionTimestampAsync(CurrentSessionId.Value);
+                // Do all database operations in one go
+                await Task.WhenAll(
+                    _chatHistory.AddMessageAsync(CurrentSessionId.Value, "assistant", response.Response),
+                    _chatHistory.UpdateSessionTimestampAsync(CurrentSessionId.Value)
+                );
 
-                // Refresh to update timestamp display
-                await ChatHistory.LoadSessionsAsync();
+                // Don't refresh history list on every message - only on new session
+                // This prevents the expensive LoadSessionsAsync on every message
             }
 
             // Show tool calls if any
-            if (response.ToolCalls != null)
+            if (response.ToolCalls != null && response.ToolCalls.Count > 0)
             {
+                // Batch tool call messages
+                var toolTasks = new List<Task>();
                 foreach (var tool in response.ToolCalls)
                 {
                     var toolMessage = $"[Tool: {tool.Tool}] {tool.Result}";
                     Messages.Add(new ChatMessage("system", toolMessage));
 
-                    // Save tool output to database
+                    // Save tool output to database (don't await - batch it)
                     if (CurrentSessionId.HasValue)
                     {
-                        await _chatHistory.AddMessageAsync(CurrentSessionId.Value, "system", toolMessage);
+                        toolTasks.Add(_chatHistory.AddMessageAsync(CurrentSessionId.Value, "system", toolMessage));
                     }
+                }
+
+                // Await all tool saves at once
+                if (toolTasks.Count > 0)
+                {
+                    await Task.WhenAll(toolTasks);
                 }
             }
         }
@@ -472,22 +600,16 @@ public partial class MainWindowViewModel : ObservableObject
             var errorMessage = $"Error: {ex.Message}";
             Messages.Add(new ChatMessage("error", errorMessage));
 
-            // Save error to database
+            // Save error to database (fire and forget)
             if (CurrentSessionId.HasValue)
             {
-                await _chatHistory.AddMessageAsync(CurrentSessionId.Value, "error", errorMessage);
+                _ = _chatHistory.AddMessageAsync(CurrentSessionId.Value, "error", errorMessage);
             }
         }
         finally
         {
             IsLoading = false;
         }
-    }
-
-    public async Task NewSessionAsync()
-    {
-        Messages.Clear();
-        CurrentSessionId = null;
     }
 
     public async Task LoadSessionAsync(int sessionId)

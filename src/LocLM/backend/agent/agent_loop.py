@@ -11,6 +11,7 @@ class AgentLoop:
         self.tools_dir = Path(__file__).parent.parent / "local_tools"
         self.conversation_history = []
         self.mode = "chat"  # "chat" or "agent"
+        self.workspace_dir: Path | None = None  # Current workspace directory
 
         # Provider configuration
         self.provider = os.getenv("LLM_PROVIDER", "groq")  # groq, ollama, openai
@@ -21,23 +22,144 @@ class AgentLoop:
 
         self.chat_system_prompt = """You are a helpful AI coding assistant. Respond directly and conversationally to user questions. Do not attempt to use any tools or execute any commands."""
 
-        self.agent_system_prompt = """You are a helpful AI coding assistant with access to local tools.
+    def _build_agent_prompt(self) -> str:
+        """Build agent system prompt with available tools and workspace context"""
+        tools_info = self._get_tools_documentation()
+        workspace = self._get_effective_workspace()
+        workspace_info = str(workspace)
 
-You have a directory called ./local_tools that contains Python functions you can use.
-To discover available tools, list the directory and read the tool files.
+        return f"""You are a helpful AI coding assistant with access to tools to interact with the user's workspace.
 
-When you need to execute a tool, respond with a JSON block:
+## Current Workspace
+{workspace_info}
+
+## Available Tools
+
+### File System Tools
+- `list_directory(path)`: List contents of a directory. Use "." for current workspace root.
+- `read_file(path)`: Read the contents of a file. Paths are relative to workspace.
+- `write_file(path, content)`: Write content to a file. Creates parent directories if needed.
+
+### Command Execution
+- `run_command(command)`: Execute a shell command in the workspace directory.
+  Examples: "dotnet build", "git status", "npm install", "python script.py"
+
+### Tool Discovery
+- `list_tools`: List all available tools
+- `read_tool(name)`: Read a tool's source code to understand its usage
+
+{tools_info}
+
+## How to Use Tools
+
+When you need to perform an action, respond with a JSON block:
 ```tool
-{
+{{
     "tool": "tool_name",
-    "args": {"arg1": "value1"}
-}
+    "args": {{"param1": "value1", "param2": "value2"}}
+}}
 ```
 
-After tool execution, you'll receive the result and can continue.
+## Examples
 
-Built-in tools: list_tools, read_tool, run_command
+**List workspace files:**
+```tool
+{{"tool": "list_directory", "args": {{"path": "."}}}}
+```
+
+**Read a file:**
+```tool
+{{"tool": "read_file", "args": {{"path": "src/main.py"}}}}
+```
+
+**Run a build:**
+```tool
+{{"tool": "run_command", "args": {{"command": "dotnet build"}}}}
+```
+
+**Write a file:**
+```tool
+{{"tool": "write_file", "args": {{"path": "src/utils.py", "content": "def hello():\\n    return 'Hello!'"}}}}
+```
+
+## Important Guidelines
+1. All file paths are relative to the workspace root
+2. Explore the workspace structure before making changes
+3. Read existing files before modifying them
+4. After tool execution, you'll receive the result and can continue or respond
+5. When you have enough information, provide a helpful response WITHOUT a tool block
 """
+
+    def _get_tools_documentation(self) -> str:
+        """Get documentation for custom tools in local_tools directory"""
+        custom_tools = []
+
+        if self.tools_dir.exists():
+            for tool_file in sorted(self.tools_dir.glob("*.py")):
+                if tool_file.name == "__init__.py":
+                    continue
+
+                try:
+                    content = tool_file.read_text()
+                    # Extract first line of docstring
+                    if '"""' in content:
+                        doc_start = content.find('"""') + 3
+                        doc_end = content.find('"""', doc_start)
+                        if doc_end > doc_start:
+                            desc = content[doc_start:doc_end].strip().split('\n')[0]
+                            custom_tools.append(f"- `{tool_file.stem}`: {desc}")
+                except Exception as e:
+                    print(f"[Tool Discovery] Error reading {tool_file.name}: {e}")
+
+        if custom_tools:
+            return "### Custom Tools\n" + "\n".join(custom_tools)
+        return ""
+
+    def set_workspace(self, path: str) -> bool:
+        """Set the current workspace directory"""
+        try:
+            workspace_path = Path(path).resolve()
+            if workspace_path.exists() and workspace_path.is_dir():
+                self.workspace_dir = workspace_path
+                print(f"[AgentLoop] Workspace set to: {self.workspace_dir}")
+                return True
+        except Exception as e:
+            print(f"[AgentLoop] Error setting workspace: {e}")
+        return False
+
+    def get_workspace(self) -> str | None:
+        """Get the current workspace directory"""
+        return str(self.workspace_dir) if self.workspace_dir else None
+
+    def _get_effective_workspace(self) -> Path:
+        """Get the effective workspace, falling back to cwd if not set"""
+        if self.workspace_dir and self.workspace_dir.exists():
+            return self.workspace_dir
+        return Path.cwd()
+
+    def _resolve_path(self, path: str) -> Path:
+        """Resolve a path relative to workspace, with safety checks"""
+        workspace = self._get_effective_workspace()
+
+        if not path or path == ".":
+            return workspace
+
+        # Handle absolute paths - check if within workspace
+        path_obj = Path(path)
+        if path_obj.is_absolute():
+            resolved = path_obj.resolve()
+        else:
+            # Relative path - resolve from workspace
+            resolved = (workspace / path).resolve()
+
+        # Security: ensure path is within workspace
+        try:
+            resolved.relative_to(workspace)
+        except ValueError:
+            print(f"[Security] Path '{path}' is outside workspace, restricting to workspace")
+            return workspace
+
+        return resolved
 
     def set_mode(self, mode: str):
         """Set the agent mode: 'chat' or 'agent'"""
@@ -56,6 +178,10 @@ Built-in tools: list_tools, read_tool, run_command
         elif self.provider == "ollama":
             return {"provider": "Ollama", "model": self.ollama_model}
         return {"provider": "Unknown", "model": "N/A"}
+
+    def clear_history(self):
+        """Clear conversation history for a new session"""
+        self.conversation_history = []
 
     async def check_provider_health(self) -> dict:
         """Check if the current provider is available"""
@@ -94,8 +220,9 @@ Built-in tools: list_tools, read_tool, run_command
             return {"response": response, "tool_calls": []}
 
         # Agent mode: allow tool calling
-        max_iterations = 5
-        for _ in range(max_iterations):
+        max_iterations = 15
+        response = ""
+        for iteration in range(max_iterations):
             response = await self._call_llm()
             if not response:
                 return {"response": f"Failed to get response from {self.provider} - no response received", "tool_calls": tool_calls}
@@ -103,6 +230,7 @@ Built-in tools: list_tools, read_tool, run_command
             tool_call = self._extract_tool_call(response)
 
             if tool_call:
+                print(f"[Agent] Iteration {iteration + 1}: Executing tool '{tool_call.get('tool')}'")
                 tool_result = await self._execute_tool(tool_call)
                 tool_calls.append({
                     "tool": tool_call["tool"],
@@ -110,12 +238,20 @@ Built-in tools: list_tools, read_tool, run_command
                     "result": tool_result
                 })
                 self.conversation_history.append({"role": "assistant", "content": response})
-                self.conversation_history.append({"role": "user", "content": f"Tool result: {tool_result}"})
+                self.conversation_history.append({"role": "user", "content": f"Tool result:\n{tool_result}"})
             else:
+                # No tool call found - this is the final response
                 self.conversation_history.append({"role": "assistant", "content": response})
-                return {"response": response, "tool_calls": tool_calls}
+                # Clean the response to remove any tool block syntax for cleaner display
+                clean_response = self._clean_response(response)
+                return {"response": clean_response, "tool_calls": tool_calls}
 
-        return {"response": "Reached maximum tool iterations", "tool_calls": tool_calls}
+        # Only reached if we hit max iterations without getting a final response
+        clean_response = self._clean_response(response)
+        return {
+            "response": f"I've completed {max_iterations} tool operations. Here's what I found:\n\n{clean_response}",
+            "tool_calls": tool_calls
+        }
 
     async def _call_llm(self) -> str:
         """Route to appropriate LLM provider"""
@@ -127,7 +263,7 @@ Built-in tools: list_tools, read_tool, run_command
 
     async def _call_groq(self) -> str:
         """Call Groq API (OpenAI-compatible)"""
-        system_prompt = self.chat_system_prompt if self.mode == "chat" else self.agent_system_prompt
+        system_prompt = self.chat_system_prompt if self.mode == "chat" else self._build_agent_prompt()
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(self.conversation_history)
 
@@ -170,7 +306,7 @@ Built-in tools: list_tools, read_tool, run_command
 
     async def _call_ollama(self) -> str:
         """Call Ollama API"""
-        system_prompt = self.chat_system_prompt if self.mode == "chat" else self.agent_system_prompt
+        system_prompt = self.chat_system_prompt if self.mode == "chat" else self._build_agent_prompt()
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(self.conversation_history)
 
@@ -188,49 +324,227 @@ Built-in tools: list_tools, read_tool, run_command
         return ""
 
     def _extract_tool_call(self, response: str) -> dict | None:
+        """Extract tool call JSON from response"""
         try:
-            if "```tool" in response:
-                start = response.find("```tool") + 7
-                end = response.find("```", start)
-                if end > start:
-                    return json.loads(response[start:end].strip())
-        except json.JSONDecodeError:
-            pass
+            # Try different code block formats that LLMs might use
+            for marker in ["```tool", "```json", "```"]:
+                if marker in response:
+                    start = response.find(marker) + len(marker)
+                    end = response.find("```", start)
+                    if end > start:
+                        json_str = response[start:end].strip()
+                        # Skip if it doesn't look like a tool call JSON
+                        if not json_str.startswith("{"):
+                            continue
+                        parsed = json.loads(json_str)
+                        # Validate it has required tool structure
+                        if isinstance(parsed, dict) and "tool" in parsed:
+                            return parsed
+        except json.JSONDecodeError as e:
+            print(f"[Tool Parse Error] Invalid JSON: {e}")
+        except Exception as e:
+            print(f"[Tool Parse Error] Unexpected error: {e}")
         return None
 
+    def _clean_response(self, response: str) -> str:
+        """Remove tool blocks from response for cleaner display"""
+        import re
+        # Remove ```tool ... ``` blocks
+        cleaned = re.sub(r'```tool\s*\{[^`]*\}\s*```', '', response, flags=re.DOTALL)
+        # Remove ```json ... ``` blocks that look like tool calls
+        cleaned = re.sub(r'```json\s*\{\s*"tool"[^`]*\}\s*```', '', cleaned, flags=re.DOTALL)
+        # Remove empty ``` blocks that might be tool calls
+        cleaned = re.sub(r'```\s*\{\s*"tool"[^`]*\}\s*```', '', cleaned, flags=re.DOTALL)
+        # Clean up extra whitespace
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+        return cleaned.strip()
+
     async def _execute_tool(self, tool_call: dict) -> str:
+        """Execute a tool and return the result"""
         tool_name = tool_call.get("tool", "")
         args = tool_call.get("args", {})
 
-        if tool_name == "list_tools":
-            return self._list_available_tools()
-        if tool_name == "read_tool":
-            return self._read_tool_file(args.get("name", ""))
-        if tool_name == "run_command":
-            result = await run_command(args.get("command", ""))
-            return f"stdout: {result.stdout}\nstderr: {result.stderr}\ncode: {result.return_code}"
+        print(f"[Tool Execute] {tool_name} with args: {args}")
 
-        tool_path = self.tools_dir / f"{tool_name}.py"
-        if tool_path.exists():
-            try:
-                spec = importlib.util.spec_from_file_location(tool_name, tool_path)
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                if hasattr(module, tool_name):
-                    return str(getattr(module, tool_name)(**args))
-            except Exception as e:
-                return f"Tool error: {e}"
+        # Normalize tool name aliases
+        tool_aliases = {
+            "create_file": "write_file",
+            "save_file": "write_file",
+            "ls": "list_directory",
+            "dir": "list_directory",
+            "cat": "read_file",
+            "view_file": "read_file",
+            "exec": "run_command",
+            "execute": "run_command",
+            "shell": "run_command",
+            "bash": "run_command",
+            "mkdir": "create_directory",
+            "rm": "delete_file",
+            "remove": "delete_file",
+            "find": "search_files",
+            "grep": "grep_files",
+        }
+        original_name = tool_name
+        tool_name = tool_aliases.get(tool_name, tool_name)
+        if original_name != tool_name:
+            print(f"[Tool Alias] '{original_name}' -> '{tool_name}'")
 
-        return f"Tool '{tool_name}' not found"
+        try:
+            # Built-in tools
+            if tool_name == "list_tools":
+                return self._list_available_tools()
+
+            if tool_name == "read_tool":
+                return self._read_tool_file(args.get("name", ""))
+
+            if tool_name == "run_command":
+                cwd = str(self.workspace_dir) if self.workspace_dir else None
+                result = await run_command(args.get("command", ""), cwd=cwd)
+                output = []
+                if result.stdout:
+                    output.append(f"stdout:\n{result.stdout}")
+                if result.stderr:
+                    output.append(f"stderr:\n{result.stderr}")
+                output.append(f"exit code: {result.return_code}")
+                return "\n".join(output)
+
+            # File system tools with workspace awareness
+            if tool_name == "list_directory":
+                # Accept path, directory, or dir as the argument name
+                dir_path = args.get("path") or args.get("directory") or args.get("dir") or "."
+                return self._tool_list_directory(dir_path)
+
+            if tool_name == "read_file":
+                # Accept path, filename, or file as the argument name
+                file_path = args.get("path") or args.get("filename") or args.get("file") or ""
+                return self._tool_read_file(file_path)
+
+            if tool_name == "write_file":
+                # Accept path, filename, or file as the argument name
+                file_path = args.get("path") or args.get("filename") or args.get("file") or ""
+                content = args.get("content") or args.get("text") or args.get("data") or ""
+                return self._tool_write_file(file_path, content)
+
+            # Dynamic tool loading from local_tools directory
+            tool_path = self.tools_dir / f"{tool_name}.py"
+            if tool_path.exists():
+                try:
+                    spec = importlib.util.spec_from_file_location(tool_name, tool_path)
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    if hasattr(module, tool_name):
+                        # Inject workspace path for tools that need it
+                        if self.workspace_dir:
+                            args["_workspace"] = str(self.workspace_dir)
+                        return str(getattr(module, tool_name)(**args))
+                except Exception as e:
+                    return f"Tool execution error: {e}"
+
+            return f"Tool '{tool_name}' not found. Use 'list_tools' to see available tools."
+
+        except Exception as e:
+            return f"Error executing tool '{tool_name}': {e}"
+
+    def _tool_list_directory(self, path: str) -> str:
+        """List directory contents with workspace awareness"""
+        try:
+            resolved = self._resolve_path(path)
+            if not resolved.exists():
+                return f"Error: Directory '{path}' does not exist"
+            if not resolved.is_dir():
+                return f"Error: '{path}' is not a directory"
+
+            items = []
+            for item in sorted(resolved.iterdir()):
+                item_type = "dir" if item.is_dir() else "file"
+                # Show relative path from workspace
+                try:
+                    rel_path = item.relative_to(self.workspace_dir) if self.workspace_dir else item.name
+                    items.append(f"{item_type}: {rel_path}")
+                except ValueError:
+                    items.append(f"{item_type}: {item.name}")
+
+            if not items:
+                return f"Directory '{path}' is empty"
+
+            return f"Contents of '{path}':\n" + "\n".join(items)
+        except PermissionError:
+            return f"Error: Permission denied accessing '{path}'"
+        except Exception as e:
+            return f"Error listing directory: {e}"
+
+    def _tool_read_file(self, path: str) -> str:
+        """Read file contents with workspace awareness"""
+        try:
+            if not path:
+                return "Error: No file path provided"
+
+            resolved = self._resolve_path(path)
+            if not resolved.exists():
+                return f"Error: File '{path}' does not exist"
+            if not resolved.is_file():
+                return f"Error: '{path}' is not a file"
+
+            # Check file size (limit to 100KB for safety)
+            size = resolved.stat().st_size
+            if size > 100 * 1024:
+                return f"Error: File '{path}' is too large ({size} bytes). Maximum is 100KB."
+
+            content = resolved.read_text(encoding='utf-8', errors='replace')
+            return f"Contents of '{path}':\n```\n{content}\n```"
+        except PermissionError:
+            return f"Error: Permission denied reading '{path}'"
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+    def _tool_write_file(self, path: str, content: str) -> str:
+        """Write content to file with workspace awareness"""
+        try:
+            if not path:
+                return "Error: No file path provided"
+            if content is None:
+                return "Error: No content provided"
+
+            resolved = self._resolve_path(path)
+
+            # Create parent directories if needed
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+
+            resolved.write_text(content, encoding='utf-8')
+            return f"Successfully wrote {len(content)} characters to '{path}'"
+        except PermissionError:
+            return f"Error: Permission denied writing to '{path}'"
+        except Exception as e:
+            return f"Error writing file: {e}"
 
     def _list_available_tools(self) -> str:
-        tools = ["list_tools", "read_tool", "run_command"]
+        """List all available tools with descriptions"""
+        tools = [
+            "Built-in tools:",
+            "  - list_tools: List all available tools",
+            "  - read_tool(name): Read a tool's source code",
+            "  - run_command(command): Execute a shell command in workspace",
+            "  - list_directory(path): List directory contents",
+            "  - read_file(path): Read file contents",
+            "  - write_file(path, content): Write content to a file",
+            "",
+            "Custom tools from local_tools/:"
+        ]
+
         if self.tools_dir.exists():
-            for f in self.tools_dir.glob("*.py"):
+            for f in sorted(self.tools_dir.glob("*.py")):
                 if f.name != "__init__.py":
-                    tools.append(f.stem)
-        return f"Available tools: {', '.join(tools)}"
+                    tools.append(f"  - {f.stem}")
+        else:
+            tools.append("  (no custom tools found)")
+
+        return "\n".join(tools)
 
     def _read_tool_file(self, name: str) -> str:
+        """Read a tool's source code"""
+        if not name:
+            return "Error: No tool name provided"
         tool_path = self.tools_dir / f"{name}.py"
-        return tool_path.read_text() if tool_path.exists() else f"Tool '{name}' not found"
+        if tool_path.exists():
+            return f"Source code for '{name}':\n```python\n{tool_path.read_text()}\n```"
+        return f"Tool '{name}' not found in local_tools directory"

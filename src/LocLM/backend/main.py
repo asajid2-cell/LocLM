@@ -43,6 +43,9 @@ class ProviderRequest(BaseModel):
     provider: str
     model: str | None = None
 
+class WorkspaceRequest(BaseModel):
+    path: str
+
 @app.get("/health")
 async def health_check():
     provider_health = await agent.check_provider_health()
@@ -125,6 +128,24 @@ async def list_tools():
             if f.name != "__init__.py":
                 tools.append({"name": f.stem, "path": str(f)})
     return {"tools": tools}
+
+@app.get("/workspace")
+async def get_workspace():
+    """Get current workspace directory"""
+    return {"workspace": agent.get_workspace()}
+
+@app.post("/workspace")
+async def set_workspace(request: WorkspaceRequest):
+    """Set the workspace directory for file operations"""
+    if agent.set_workspace(request.path):
+        return {"workspace": agent.get_workspace(), "status": "ok"}
+    raise HTTPException(status_code=400, detail=f"Invalid workspace path: {request.path}")
+
+@app.post("/clear")
+async def clear_history():
+    """Clear conversation history for a new session"""
+    agent.clear_history()
+    return {"status": "ok", "message": "Conversation history cleared"}
 
 @app.post("/transpile")
 async def transpile_mcp():

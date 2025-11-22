@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
@@ -41,24 +41,55 @@ public partial class FileExplorerViewModel : ObservableObject
 
     public async Task LoadDirectoryAsync(string path)
     {
-        if (!Directory.Exists(path))
-            return;
-
-        IsLoading = true;
-        RootPath = path;
-        RootName = Path.GetFileName(path);
-        if (string.IsNullOrEmpty(RootName))
-            RootName = path; // For root drives like C:\
-
-        RootItems.Clear();
-
-        var items = await _fileSystem.GetDirectoryContentsAsync(path);
-        foreach (var item in items)
+        try
         {
-            RootItems.Add(new FileTreeItem(item, _fileSystem, 0));
-        }
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            {
+                System.Diagnostics.Debug.WriteLine($"[FileExplorer] Invalid path: {path}");
+                // Fallback to current working directory if the requested path is missing
+                var fallback = Directory.GetCurrentDirectory();
+                if (!Directory.Exists(fallback))
+                {
+                    IsLoading = false;
+                    return;
+                }
+                path = fallback;
+            }
 
-        IsLoading = false;
+            IsLoading = true;
+            RootPath = path;
+            RootName = Path.GetFileName(path);
+            if (string.IsNullOrEmpty(RootName))
+                RootName = path; // For root drives like C:\
+
+            RootItems.Clear();
+
+            var root = new FileTreeItem(new FileSystemItem
+            {
+                Name = RootName,
+                FullPath = path,
+                IsDirectory = true
+            }, _fileSystem, 0, this)
+            {
+                IsExpanded = true
+            };
+
+            await root.LoadChildrenAsync();
+
+            // Only add if valid
+            if (Directory.Exists(path))
+            {
+                RootItems.Add(root);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FileExplorer] Error loading directory {path}: {ex.Message}");
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
     [RelayCommand]
@@ -88,29 +119,56 @@ public partial class FileExplorerViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private async Task SelectItemAsync(FileTreeItem item)
+    public async Task SelectItemAsync(FileTreeItem item)
     {
-        // Deselect previous
-        if (SelectedItem != null)
-            SelectedItem.IsSelected = false;
-
-        SelectedItem = item;
-        item.IsSelected = true;
-        SelectedFilePath = item.FullPath;
-
-        if (!item.IsDirectory)
+        try
         {
-            try
+            if (item == null)
             {
-                var content = await _fileSystem.ReadFileAsync(item.FullPath);
-                SelectedFileContent = content;
-                OnFileOpened?.Invoke(item.FullPath, content);
+                System.Diagnostics.Debug.WriteLine("[FileExplorer] SelectItem called with null item");
+                return;
             }
-            catch (Exception ex)
+
+            // Deselect previous
+            if (SelectedItem != null)
+                SelectedItem.IsSelected = false;
+
+            SelectedItem = item;
+            item.IsSelected = true;
+            SelectedFilePath = item.FullPath;
+
+            if (item.IsDirectory)
             {
-                SelectedFileContent = $"Error reading file: {ex.Message}";
+                // Toggle expand/collapse for directories
+                await ToggleExpandAsync(item);
             }
+            else
+            {
+                // Open file in editor - validate first
+                if (string.IsNullOrWhiteSpace(item.FullPath) || !_fileSystem.Exists(item.FullPath))
+                {
+                    SelectedFileContent = "[File not found]";
+                    System.Diagnostics.Debug.WriteLine($"[FileExplorer] File not found: {item.FullPath}");
+                    return;
+                }
+
+                // Open file in editor
+                try
+                {
+                    var content = await _fileSystem.ReadFileAsync(item.FullPath);
+                    SelectedFileContent = content;
+                    OnFileOpened?.Invoke(item.FullPath, content);
+                }
+                catch (Exception ex)
+                {
+                    SelectedFileContent = $"Error reading file: {ex.Message}";
+                    System.Diagnostics.Debug.WriteLine($"[FileExplorer] Error opening file {item.FullPath}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FileExplorer] Error in SelectItemAsync: {ex.Message}");
         }
     }
 
@@ -164,6 +222,7 @@ public partial class FileExplorerViewModel : ObservableObject
 public partial class FileTreeItem : ObservableObject
 {
     private readonly IFileSystemService _fileSystem;
+    private readonly FileExplorerViewModel _parent;
 
     public string Name { get; }
     public string FullPath { get; }
@@ -181,14 +240,21 @@ public partial class FileTreeItem : ObservableObject
 
     public ObservableCollection<FileTreeItem> Children { get; } = new();
 
-    public FileTreeItem(FileSystemItem item, IFileSystemService fileSystem, int depth)
+    public FileTreeItem(FileSystemItem item, IFileSystemService fileSystem, int depth, FileExplorerViewModel parent)
     {
         _fileSystem = fileSystem;
+        _parent = parent;
         Name = item.Name;
         FullPath = item.FullPath;
         IsDirectory = item.IsDirectory;
         FileIcon = item.Icon;
         Depth = depth;
+    }
+
+    [RelayCommand]
+    private async Task SelectAsync()
+    {
+        await _parent.SelectItemAsync(this);
     }
 
     public async Task LoadChildrenAsync()
@@ -200,7 +266,7 @@ public partial class FileTreeItem : ObservableObject
         var items = await _fileSystem.GetDirectoryContentsAsync(FullPath);
         foreach (var item in items)
         {
-            Children.Add(new FileTreeItem(item, _fileSystem, Depth + 1));
+            Children.Add(new FileTreeItem(item, _fileSystem, Depth + 1, _parent));
         }
     }
 
@@ -209,3 +275,4 @@ public partial class FileTreeItem : ObservableObject
         OnPropertyChanged(nameof(Icon));
     }
 }
+

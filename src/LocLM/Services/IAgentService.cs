@@ -24,6 +24,8 @@ public interface IAgentService
     Task<string> SetModeAsync(string mode, CancellationToken token = default);
     Task<ProviderInfo> GetProviderAsync(CancellationToken token = default);
     Task<ProviderInfo> SetProviderAsync(string provider, string? model = null, CancellationToken token = default);
+    Task<bool> SetWorkspaceAsync(string path, CancellationToken token = default);
+    Task ClearHistoryAsync(CancellationToken token = default);
 }
 
 public class AgentService : IAgentService
@@ -189,5 +191,28 @@ public class AgentService : IAgentService
         }
         catch { }
         return new ProviderInfo(provider, model ?? "unknown", new List<string> { "groq", "ollama" });
+    }
+
+    public async Task<bool> SetWorkspaceAsync(string path, CancellationToken token = default)
+    {
+        try
+        {
+            var request = new { path };
+            var response = await _client.PostAsJsonAsync("/workspace", request, token);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task ClearHistoryAsync(CancellationToken token = default)
+    {
+        try
+        {
+            await _client.PostAsync("/clear", null, token);
+        }
+        catch { }
     }
 }

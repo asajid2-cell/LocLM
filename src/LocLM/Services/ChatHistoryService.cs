@@ -84,25 +84,32 @@ public class ChatHistoryService : IChatHistoryService
 
     public async Task<List<ChatSession>> GetAllSessionsAsync()
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
-
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Id, Title, CreatedAt, UpdatedAt, ModelName, Mode FROM ChatSessions ORDER BY UpdatedAt DESC";
-
         var sessions = new List<ChatSession>();
-        using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        try
         {
-            sessions.Add(new ChatSession
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT Id, Title, CreatedAt, UpdatedAt, ModelName, Mode FROM ChatSessions ORDER BY UpdatedAt DESC LIMIT 100";
+
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
             {
-                Id = reader.GetInt32(0),
-                Title = reader.GetString(1),
-                CreatedAt = DateTime.Parse(reader.GetString(2)),
-                UpdatedAt = DateTime.Parse(reader.GetString(3)),
-                ModelName = reader.GetString(4),
-                Mode = reader.GetString(5)
-            });
+                sessions.Add(new ChatSession
+                {
+                    Id = reader.GetInt32(0),
+                    Title = reader.GetString(1),
+                    CreatedAt = DateTime.Parse(reader.GetString(2)),
+                    UpdatedAt = DateTime.Parse(reader.GetString(3)),
+                    ModelName = reader.GetString(4),
+                    Mode = reader.GetString(5)
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ChatHistory] Error getting sessions: {ex.Message}");
         }
         return sessions;
     }
@@ -148,34 +155,61 @@ public class ChatHistoryService : IChatHistoryService
 
     public async Task DeleteSessionAsync(int sessionId)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
 
-        using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM ChatSessions WHERE Id = @id";
-        command.Parameters.AddWithValue("@id", sessionId);
+            // Delete messages first (cascade doesn't always work with SQLite)
+            using var deleteMessages = connection.CreateCommand();
+            deleteMessages.CommandText = "DELETE FROM ChatMessages WHERE SessionId = @id";
+            deleteMessages.Parameters.AddWithValue("@id", sessionId);
+            await deleteMessages.ExecuteNonQueryAsync();
 
-        await command.ExecuteNonQueryAsync();
+            // Then delete session
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM ChatSessions WHERE Id = @id";
+            command.Parameters.AddWithValue("@id", sessionId);
+            await command.ExecuteNonQueryAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ChatHistory] Error deleting session: {ex.Message}");
+        }
     }
 
     public async Task<int> AddMessageAsync(int sessionId, string role, string content)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
+        try
+        {
+            // Truncate very long content to prevent database bloat (1MB limit)
+            if (content.Length > 1024 * 1024)
+            {
+                content = content.Substring(0, 1024 * 1024) + "\n[Content truncated due to size]";
+            }
 
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            INSERT INTO ChatMessages (SessionId, Role, Content, CreatedAt)
-            VALUES (@sessionId, @role, @content, @createdAt);
-            SELECT last_insert_rowid();
-        ";
-        command.Parameters.AddWithValue("@sessionId", sessionId);
-        command.Parameters.AddWithValue("@role", role);
-        command.Parameters.AddWithValue("@content", content);
-        command.Parameters.AddWithValue("@createdAt", DateTime.UtcNow.ToString("o"));
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
 
-        var result = await command.ExecuteScalarAsync();
-        return Convert.ToInt32(result);
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO ChatMessages (SessionId, Role, Content, CreatedAt)
+                VALUES (@sessionId, @role, @content, @createdAt);
+                SELECT last_insert_rowid();
+            ";
+            command.Parameters.AddWithValue("@sessionId", sessionId);
+            command.Parameters.AddWithValue("@role", role);
+            command.Parameters.AddWithValue("@content", content);
+            command.Parameters.AddWithValue("@createdAt", DateTime.UtcNow.ToString("o"));
+
+            var result = await command.ExecuteScalarAsync();
+            return Convert.ToInt32(result);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ChatHistory] Error adding message: {ex.Message}");
+            return -1;
+        }
     }
 
     public async Task<List<ChatMessage>> GetSessionMessagesAsync(int sessionId)

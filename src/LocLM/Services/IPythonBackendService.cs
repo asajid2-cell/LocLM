@@ -55,11 +55,28 @@ public class PythonBackendService : IPythonBackendService
         // Set LLM provider (use environment variable or default to Groq)
         psi.Environment["LLM_PROVIDER"] = Environment.GetEnvironmentVariable("LLM_PROVIDER") ?? "groq";
 
-        // Pass through Groq API key if configured in the environment
+        // Pass through Groq API key and model if configured in the environment
         var groqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY");
         if (!string.IsNullOrWhiteSpace(groqApiKey))
         {
             psi.Environment["GROQ_API_KEY"] = groqApiKey;
+        }
+        var groqModel = Environment.GetEnvironmentVariable("GROQ_MODEL");
+        if (!string.IsNullOrWhiteSpace(groqModel))
+        {
+            psi.Environment["GROQ_MODEL"] = groqModel;
+        }
+
+        // Pass Ollama preferences if present
+        var ollamaModel = Environment.GetEnvironmentVariable("OLLAMA_MODEL");
+        if (!string.IsNullOrWhiteSpace(ollamaModel))
+        {
+            psi.Environment["OLLAMA_MODEL"] = ollamaModel;
+        }
+        var ollamaUrl = Environment.GetEnvironmentVariable("OLLAMA_URL");
+        if (!string.IsNullOrWhiteSpace(ollamaUrl))
+        {
+            psi.Environment["OLLAMA_URL"] = ollamaUrl;
         }
 
         _process = new Process { StartInfo = psi };

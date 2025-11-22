@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -20,6 +20,26 @@ public partial class EditorViewModel : ObservableObject
     private bool _hasOpenTabs;
 
     public ObservableCollection<EditorTab> Tabs { get; } = new();
+    public ObservableCollection<EditorTab> OpenFiles => Tabs;
+
+    public string CurrentFileContent
+    {
+        get => ActiveTab?.Content ?? string.Empty;
+        set
+        {
+            if (ActiveTab == null)
+                return;
+
+            if (ActiveTab.Content != value)
+            {
+                ActiveTab.Content = value;
+                // Don't call OnPropertyChanged here - it creates a loop
+                // The ActiveTab.Content setter will handle notifications
+            }
+        }
+    }
+
+    public string LineNumbers => ActiveTab?.LineNumbers ?? "1";
 
     public EditorViewModel(IFileSystemService fileSystem)
     {
@@ -29,7 +49,6 @@ public partial class EditorViewModel : ObservableObject
 
     public async Task OpenFileAsync(string filePath)
     {
-        // Check if already open
         var existing = Tabs.FirstOrDefault(t => t.FilePath == filePath);
         if (existing != null)
         {
@@ -39,14 +58,36 @@ public partial class EditorViewModel : ObservableObject
 
         try
         {
+            // Check file size before loading to prevent crashes
+            var fileInfo = new FileInfo(filePath);
+            const long maxFileSizeMB = 10; // 10 MB limit
+            const long maxFileSize = maxFileSizeMB * 1024 * 1024;
+
+            if (fileInfo.Length > maxFileSize)
+            {
+                System.Diagnostics.Debug.WriteLine($"File too large to open: {fileInfo.Length / 1024 / 1024} MB (max {maxFileSizeMB} MB)");
+                // Could add a user-facing error message here
+                return;
+            }
+
             var content = await _fileSystem.ReadFileAsync(filePath);
+
+            // Additional safety check for line count
+            var lineCount = content.Split('\n').Length;
+            if (lineCount > 50000)
+            {
+                System.Diagnostics.Debug.WriteLine($"File has too many lines: {lineCount} (max 50000)");
+                // Truncate to first 50000 lines
+                var lines = content.Split('\n').Take(50000);
+                content = string.Join("\n", lines) + "\n\n[... File truncated for performance ...]";
+            }
+
             var tab = new EditorTab(filePath, content);
             Tabs.Add(tab);
             SetActiveTab(tab);
         }
         catch (Exception ex)
         {
-            // Could show error in UI
             System.Diagnostics.Debug.WriteLine($"Failed to open file: {ex.Message}");
         }
     }
@@ -67,7 +108,6 @@ public partial class EditorViewModel : ObservableObject
         var index = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
 
-        // Select adjacent tab
         if (Tabs.Count > 0)
         {
             var newIndex = Math.Min(index, Tabs.Count - 1);
@@ -135,6 +175,12 @@ public partial class EditorViewModel : ObservableObject
         var prevIndex = currentIndex == 0 ? Tabs.Count - 1 : currentIndex - 1;
         SetActiveTab(Tabs[prevIndex]);
     }
+
+    partial void OnActiveTabChanged(EditorTab? value)
+    {
+        OnPropertyChanged(nameof(CurrentFileContent));
+        OnPropertyChanged(nameof(LineNumbers));
+    }
 }
 
 public partial class EditorTab : ObservableObject
@@ -156,7 +202,7 @@ public partial class EditorTab : ObservableObject
     public string OriginalContent { get; set; }
 
     public string Icon => GetFileIcon(FileName);
-    public string Title => IsDirty ? $"{FileName} •" : FileName;
+    public string Title => IsDirty ? $"{FileName} *" : FileName;
 
     // Line numbers for display
     public string LineNumbers => GenerateLineNumbers(Content);
@@ -175,7 +221,8 @@ public partial class EditorTab : ObservableObject
     {
         IsDirty = value != OriginalContent;
         OnPropertyChanged(nameof(Title));
-        OnPropertyChanged(nameof(LineNumbers));
+        // Don't regenerate line numbers on every keystroke - too expensive
+        // Only update when explicitly requested
     }
 
     private static string GenerateLineNumbers(string content)
@@ -183,7 +230,16 @@ public partial class EditorTab : ObservableObject
         if (string.IsNullOrEmpty(content))
             return "1";
 
-        var lineCount = content.Split('\n').Length;
+        // Limit line number generation to prevent performance issues
+        var lines = content.Split('\n');
+        var lineCount = Math.Min(lines.Length, 10000); // Cap at 10k lines for performance
+
+        if (lineCount > 1000)
+        {
+            // For large files, just show count instead of all line numbers
+            return $"1-{lineCount}";
+        }
+
         return string.Join("\n", Enumerable.Range(1, lineCount));
     }
 
@@ -210,16 +266,16 @@ public partial class EditorTab : ObservableObject
         var ext = Path.GetExtension(name).ToLowerInvariant();
         return ext switch
         {
-            ".cs" => "🔷",
-            ".py" => "🐍",
-            ".js" or ".ts" or ".jsx" or ".tsx" => "📜",
-            ".json" => "{ }",
-            ".xml" or ".xaml" or ".axaml" => "📋",
-            ".md" => "📝",
-            ".html" or ".htm" => "🌐",
-            ".css" or ".scss" => "🎨",
-            ".png" or ".jpg" or ".jpeg" or ".gif" or ".svg" => "🖼️",
-            _ => "📄"
+            ".cs" => "CS",
+            ".py" => "PY",
+            ".js" or ".ts" or ".jsx" or ".tsx" => "JS",
+            ".json" => "JSON",
+            ".xml" or ".xaml" or ".axaml" => "XML",
+            ".md" => "MD",
+            ".html" or ".htm" => "HTML",
+            ".css" or ".scss" => "CSS",
+            ".png" or ".jpg" or ".jpeg" or ".gif" or ".svg" => "IMG",
+            _ => "FILE"
         };
     }
 }

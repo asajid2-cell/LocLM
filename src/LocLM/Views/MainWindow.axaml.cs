@@ -125,6 +125,15 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 return;
             }
+            if (vm.IsFileMenuOpen || vm.IsEditMenuOpen || vm.IsViewMenuOpen || vm.IsRunMenuOpen)
+            {
+                vm.IsFileMenuOpen = false;
+                vm.IsEditMenuOpen = false;
+                vm.IsViewMenuOpen = false;
+                vm.IsRunMenuOpen = false;
+                e.Handled = true;
+                return;
+            }
             // Set vim to normal mode
             _keyboardService?.SetVimMode("NORMAL");
             _keyBuffer = "";
@@ -313,6 +322,41 @@ public partial class MainWindow : Window
         if (e.Source == sender && DataContext is MainWindowViewModel vm)
         {
             vm.IsSettingsOpen = false;
+        }
+    }
+
+    private void CloseMenus_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        // Only close if clicking the backdrop, not the menu content
+        if (e.Source == sender && DataContext is MainWindowViewModel vm)
+        {
+            vm.IsFileMenuOpen = false;
+            vm.IsEditMenuOpen = false;
+            vm.IsViewMenuOpen = false;
+            vm.IsRunMenuOpen = false;
+        }
+    }
+
+    private void InputTextBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+
+        // Ctrl+Enter or just Enter (without Shift) sends the message
+        if (e.Key == Key.Enter)
+        {
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            {
+                // Ctrl+Enter sends the message
+                e.Handled = true;
+                vm.SendMessageCommand.Execute(null);
+            }
+            else if (!e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            {
+                // Enter alone sends the message
+                e.Handled = true;
+                vm.SendMessageCommand.Execute(null);
+            }
+            // Shift+Enter allows new line (default TextBox behavior)
         }
     }
 }

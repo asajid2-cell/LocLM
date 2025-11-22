@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -34,7 +34,7 @@ public class FileSystemItem
     public int Depth { get; set; }
 
     public string Icon => IsDirectory
-        ? (IsExpanded ? "▾" : "▸")
+        ? (IsExpanded ? "â–¾" : "â–¸")
         : GetFileIcon(Name);
 
     public string SizeDisplay => IsDirectory ? "" : FormatSize(Size);
@@ -100,47 +100,78 @@ public class FileSystemService : IFileSystemService
         {
             var items = new List<FileSystemItem>();
 
-            if (!Directory.Exists(path))
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
                 return items;
 
             try
             {
-                var dirs = Directory.GetDirectories(path)
-                    .Where(d => !IsHidden(d))
-                    .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
-
-                foreach (var dir in dirs)
+                // Get directories with better error handling
+                try
                 {
-                    var dirInfo = new DirectoryInfo(dir);
-                    items.Add(new FileSystemItem
+                    var dirs = Directory.GetDirectories(path)
+                        .Where(d => !IsHidden(d))
+                        .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var dir in dirs)
                     {
-                        Name = dirInfo.Name,
-                        FullPath = dir,
-                        IsDirectory = true,
-                        LastModified = dirInfo.LastWriteTime
-                    });
+                        try
+                        {
+                            var dirInfo = new DirectoryInfo(dir);
+                            items.Add(new FileSystemItem
+                            {
+                                Name = dirInfo.Name,
+                                FullPath = dir,
+                                IsDirectory = true,
+                                LastModified = dirInfo.LastWriteTime
+                            });
+                        }
+                        catch
+                        {
+                            // Skip individual directories that cause errors
+                        }
+                    }
+                }
+                catch
+                {
+                    // Failed to enumerate directories
                 }
 
-                var files = Directory.GetFiles(path)
-                    .Where(f => !IsHidden(f))
-                    .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
-
-                foreach (var file in files)
+                // Get files with better error handling
+                try
                 {
-                    var fileInfo = new FileInfo(file);
-                    items.Add(new FileSystemItem
+                    var files = Directory.GetFiles(path)
+                        .Where(f => !IsHidden(f))
+                        .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var file in files)
                     {
-                        Name = fileInfo.Name,
-                        FullPath = file,
-                        IsDirectory = false,
-                        Size = fileInfo.Length,
-                        LastModified = fileInfo.LastWriteTime
-                    });
+                        try
+                        {
+                            var fileInfo = new FileInfo(file);
+                            items.Add(new FileSystemItem
+                            {
+                                Name = fileInfo.Name,
+                                FullPath = file,
+                                IsDirectory = false,
+                                Size = fileInfo.Length,
+                                LastModified = fileInfo.LastWriteTime
+                            });
+                        }
+                        catch
+                        {
+                            // Skip individual files that cause errors
+                        }
+                    }
+                }
+                catch
+                {
+                    // Failed to enumerate files
                 }
             }
-            catch (UnauthorizedAccessException)
+            catch (Exception ex)
             {
-                // Ignore directories we cannot access
+                // Log but don't crash
+                System.Diagnostics.Debug.WriteLine($"[FileSystem] Error reading directory {path}: {ex.Message}");
             }
 
             return items;
@@ -149,41 +180,182 @@ public class FileSystemService : IFileSystemService
 
     public async Task<string> ReadFileAsync(string path)
     {
-        return await File.ReadAllTextAsync(path);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                System.Diagnostics.Debug.WriteLine($"[FileSystem] File not found: {path}");
+                return string.Empty;
+            }
+
+            // Check file size before reading
+            var fileInfo = new FileInfo(path);
+            if (fileInfo.Length > 10 * 1024 * 1024) // 10 MB limit
+            {
+                System.Diagnostics.Debug.WriteLine($"[FileSystem] File too large: {path}");
+                return "[File too large to display]";
+            }
+
+            return await File.ReadAllTextAsync(path);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FileSystem] Error reading file {path}: {ex.Message}");
+            return $"[Error: {ex.Message}]";
+        }
     }
 
     public async Task WriteFileAsync(string path, string content)
     {
-        await File.WriteAllTextAsync(path, content);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                System.Diagnostics.Debug.WriteLine("[FileSystem] Invalid path for write");
+                return;
+            }
+
+            // Ensure directory exists
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            await File.WriteAllTextAsync(path, content ?? string.Empty);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FileSystem] Error writing file {path}: {ex.Message}");
+            throw; // Re-throw for caller to handle
+        }
     }
 
     public Task CreateFileAsync(string path)
     {
-        File.Create(path).Dispose();
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                System.Diagnostics.Debug.WriteLine("[FileSystem] Invalid path for create file");
+                return Task.CompletedTask;
+            }
+
+            // Check if file already exists
+            if (File.Exists(path))
+            {
+                System.Diagnostics.Debug.WriteLine($"[FileSystem] File already exists: {path}");
+                return Task.CompletedTask;
+            }
+
+            // Ensure directory exists
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            // Create and immediately dispose to release file handle
+            using (var stream = File.Create(path))
+            {
+                // File created, stream will be disposed automatically
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FileSystem] Error creating file {path}: {ex.Message}");
+        }
+
         return Task.CompletedTask;
     }
 
     public Task CreateDirectoryAsync(string path)
     {
-        Directory.CreateDirectory(path);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                System.Diagnostics.Debug.WriteLine("[FileSystem] Invalid path for create directory");
+                return Task.CompletedTask;
+            }
+
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FileSystem] Error creating directory {path}: {ex.Message}");
+        }
+
         return Task.CompletedTask;
     }
 
     public Task DeleteAsync(string path)
     {
-        if (Directory.Exists(path))
-            Directory.Delete(path, true);
-        else if (File.Exists(path))
-            File.Delete(path);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                System.Diagnostics.Debug.WriteLine("[FileSystem] Invalid path for delete");
+                return Task.CompletedTask;
+            }
+
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            else if (File.Exists(path))
+            {
+                // Check if file is read-only and remove attribute if needed
+                var fileInfo = new FileInfo(path);
+                if (fileInfo.IsReadOnly)
+                {
+                    fileInfo.IsReadOnly = false;
+                }
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FileSystem] Error deleting {path}: {ex.Message}");
+        }
+
         return Task.CompletedTask;
     }
 
     public Task RenameAsync(string oldPath, string newPath)
     {
-        if (Directory.Exists(oldPath))
-            Directory.Move(oldPath, newPath);
-        else if (File.Exists(oldPath))
-            File.Move(oldPath, newPath);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(oldPath) || string.IsNullOrWhiteSpace(newPath))
+            {
+                System.Diagnostics.Debug.WriteLine("[FileSystem] Invalid paths for rename");
+                return Task.CompletedTask;
+            }
+
+            // Check if target already exists
+            if (File.Exists(newPath) || Directory.Exists(newPath))
+            {
+                System.Diagnostics.Debug.WriteLine($"[FileSystem] Target already exists: {newPath}");
+                return Task.CompletedTask;
+            }
+
+            if (Directory.Exists(oldPath))
+            {
+                Directory.Move(oldPath, newPath);
+            }
+            else if (File.Exists(oldPath))
+            {
+                File.Move(oldPath, newPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FileSystem] Error renaming {oldPath} to {newPath}: {ex.Message}");
+        }
+
         return Task.CompletedTask;
     }
 
@@ -201,3 +373,4 @@ public class FileSystemService : IFileSystemService
         return excludedDirs.Contains(name, StringComparer.OrdinalIgnoreCase);
     }
 }
+
