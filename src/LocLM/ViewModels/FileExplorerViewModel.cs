@@ -92,13 +92,18 @@ public partial class FileExplorerViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private async Task RefreshAsync()
+    public async Task RefreshCurrentDirectoryAsync()
     {
         if (!string.IsNullOrEmpty(RootPath))
         {
             await LoadDirectoryAsync(RootPath);
         }
+    }
+
+    [RelayCommand]
+    private async Task RefreshAsync()
+    {
+        await RefreshCurrentDirectoryAsync();
     }
 
     [RelayCommand]

@@ -17,6 +17,7 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IFileSystemService _fileSystem;
     private readonly IChatHistoryService _chatHistory;
     private readonly System.Threading.CancellationTokenSource _cancellationTokenSource = new();
+    private bool _workspaceInitialized = false;
 
     [ObservableProperty]
     private string _inputText = string.Empty;
@@ -46,10 +47,10 @@ public partial class MainWindowViewModel : ObservableObject
     private string _platform = "Windows";
 
     [ObservableProperty]
-    private string _currentMode = "chat";
+    private string _currentMode = "agent";  // Default to agent mode
 
     [ObservableProperty]
-    private bool _isChatMode = true;
+    private bool _isChatMode = false;  // Default to agent mode (false = agent, true = chat)
 
     [ObservableProperty]
     private bool _isSettingsOpen;
@@ -208,6 +209,27 @@ public partial class MainWindowViewModel : ObservableObject
 
                         CurrentMode = await _agentService.GetModeAsync();
                         IsChatMode = CurrentMode == "chat";
+
+                        // Initialize workspace on first successful connection
+                        if (!_workspaceInitialized)
+                        {
+                            var workspaceRoot = FindWorkspaceRoot();
+                            if (workspaceRoot != null)
+                            {
+                                try
+                                {
+                                    await _agentService.SetWorkspaceAsync(workspaceRoot);
+                                    WorkingDirectory = workspaceRoot;
+                                    await FileExplorer.LoadDirectoryAsync(workspaceRoot);
+                                    System.Diagnostics.Debug.WriteLine($"[Workspace] Auto-initialized workspace to: {workspaceRoot}");
+                                    _workspaceInitialized = true;
+                                }
+                                catch (Exception ex)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[Workspace] Failed to auto-initialize workspace: {ex.Message}");
+                                }
+                            }
+                        }
                     }
                     else
                     {
@@ -593,6 +615,27 @@ public partial class MainWindowViewModel : ObservableObject
                 {
                     await Task.WhenAll(toolTasks);
                 }
+
+                // Check for file changes and display them
+                try
+                {
+                    var fileChanges = await _agentService.GetFileChangesAsync();
+                    if (fileChanges != null && fileChanges.TotalFiles > 0)
+                    {
+                        var changesSummary = FormatFileChangesSummary(fileChanges);
+                        Messages.Add(new ChatMessage("system", changesSummary));
+
+                        // Also refresh the file explorer to show new/modified files
+                        if (!string.IsNullOrEmpty(WorkingDirectory) && WorkingDirectory != "No folder opened")
+                        {
+                            _ = FileExplorer.RefreshCurrentDirectoryAsync();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[FileChanges] Failed to fetch changes: {ex.Message}");
+                }
             }
         }
         catch (Exception ex)
@@ -626,6 +669,32 @@ public partial class MainWindowViewModel : ObservableObject
         // Switch to chat view
         ViewMode = "chat";
         IsEditorView = false;
+    }
+
+    private string FormatFileChangesSummary(FileChangeSummary changes)
+    {
+        var lines = new List<string>
+        {
+            "📁 File Changes:",
+            $"   Created: {changes.Created}",
+            $"   Modified: {changes.Modified}",
+            $"   Deleted: {changes.Deleted}",
+            ""
+        };
+
+        foreach (var file in changes.Files)
+        {
+            var icon = file.Operation.ToLower() switch
+            {
+                "create" => "✨",
+                "modify" => "📝",
+                "delete" => "🗑️",
+                _ => "•"
+            };
+            lines.Add($"   {icon} {file.Path}");
+        }
+
+        return string.Join("\n", lines);
     }
 }
 

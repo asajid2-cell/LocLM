@@ -11,8 +11,10 @@ namespace LocLM.Services;
 public record ChatResponse(string Response, List<ToolCall>? ToolCalls);
 public record ToolCall(string Tool, Dictionary<string, object>? Args, string? Result);
 public record ModelInfo(string Provider, string Model, bool Available);
-
 public record ProviderInfo(string Provider, string Model, List<string> AvailableProviders);
+public record FileChange(string Path, string Operation);
+public record FileChangeSummary(int TotalFiles, int Created, int Modified, int Deleted, List<FileChange> Files);
+public record FileDiff(string Path, string? Diff, string? Message);
 
 public interface IAgentService
 {
@@ -26,6 +28,9 @@ public interface IAgentService
     Task<ProviderInfo> SetProviderAsync(string provider, string? model = null, CancellationToken token = default);
     Task<bool> SetWorkspaceAsync(string path, CancellationToken token = default);
     Task ClearHistoryAsync(CancellationToken token = default);
+    Task<FileChangeSummary?> GetFileChangesAsync(CancellationToken token = default);
+    Task<FileDiff?> GetFileDiffAsync(string path, CancellationToken token = default);
+    Task<string?> GetAllDiffsAsync(CancellationToken token = default);
 }
 
 public class AgentService : IAgentService
@@ -214,5 +219,81 @@ public class AgentService : IAgentService
             await _client.PostAsync("/clear", null, token);
         }
         catch { }
+    }
+
+    public async Task<FileChangeSummary?> GetFileChangesAsync(CancellationToken token = default)
+    {
+        try
+        {
+            var response = await _client.GetFromJsonAsync<JsonElement>("/changes", token);
+
+            var totalFiles = 0;
+            var created = 0;
+            var modified = 0;
+            var deleted = 0;
+            var files = new List<FileChange>();
+
+            if (response.TryGetProperty("total_files", out var tf))
+                totalFiles = tf.GetInt32();
+            if (response.TryGetProperty("created", out var c))
+                created = c.GetInt32();
+            if (response.TryGetProperty("modified", out var m))
+                modified = m.GetInt32();
+            if (response.TryGetProperty("deleted", out var d))
+                deleted = d.GetInt32();
+            if (response.TryGetProperty("files", out var filesArray))
+            {
+                foreach (var file in filesArray.EnumerateArray())
+                {
+                    var path = file.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "";
+                    var operation = file.TryGetProperty("operation", out var o) ? o.GetString() ?? "" : "";
+                    files.Add(new FileChange(path, operation));
+                }
+            }
+
+            return new FileChangeSummary(totalFiles, created, modified, deleted, files);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<FileDiff?> GetFileDiffAsync(string path, CancellationToken token = default)
+    {
+        try
+        {
+            var encodedPath = Uri.EscapeDataString(path);
+            var response = await _client.GetFromJsonAsync<JsonElement>($"/diff/{encodedPath}", token);
+
+            var filePath = response.TryGetProperty("path", out var p) ? p.GetString() ?? path : path;
+            var diff = response.TryGetProperty("diff", out var d) && d.ValueKind != JsonValueKind.Null
+                ? d.GetString()
+                : null;
+            var message = response.TryGetProperty("message", out var m)
+                ? m.GetString()
+                : null;
+
+            return new FileDiff(filePath, diff, message);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<string?> GetAllDiffsAsync(CancellationToken token = default)
+    {
+        try
+        {
+            var response = await _client.GetFromJsonAsync<JsonElement>("/diffs", token);
+            if (response.TryGetProperty("diffs", out var diffs))
+                return diffs.GetString();
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

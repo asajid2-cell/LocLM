@@ -12,6 +12,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from agent.agent_loop import AgentLoop
 from agent.platform_utils import get_platform_info
+from agent.models import (
+    ChatRequest, ChatResponse, WorkspaceRequest, HealthResponse,
+    ToolResult, ToolCallStatus
+)
 from dotenv import load_dotenv
 
 # Load environment variables from project root .env if present
@@ -32,19 +36,12 @@ agent = AgentLoop()
 class PromptRequest(BaseModel):
     prompt: str
 
-class ChatResponse(BaseModel):
-    response: str
-    tool_calls: list = []
-
 class ModeRequest(BaseModel):
     mode: str
 
 class ProviderRequest(BaseModel):
     provider: str
     model: str | None = None
-
-class WorkspaceRequest(BaseModel):
-    path: str
 
 @app.get("/health")
 async def health_check():
@@ -146,6 +143,63 @@ async def clear_history():
     """Clear conversation history for a new session"""
     agent.clear_history()
     return {"status": "ok", "message": "Conversation history cleared"}
+
+
+# Planning endpoints
+@app.get("/planning")
+async def get_planning_status():
+    """Get planning mode status"""
+    return {
+        "enabled": agent.get_planning_enabled(),
+        "current_plan": agent.get_current_plan().model_dump() if agent.get_current_plan() else None
+    }
+
+
+@app.post("/planning")
+async def set_planning_status(request: dict):
+    """Enable or disable planning mode"""
+    enabled = request.get("enabled", True)
+    agent.set_planning_enabled(enabled)
+    return {"enabled": agent.get_planning_enabled()}
+
+
+@app.post("/plan")
+async def generate_plan(request: PromptRequest):
+    """Generate an execution plan for a request without executing it"""
+    try:
+        plan = await agent.generate_plan(request.prompt)
+        if plan:
+            return {
+                "status": "ok",
+                "plan": plan.model_dump(),
+                "display": agent.planner.format_plan_for_display(plan)
+            }
+        return {"status": "error", "message": "Could not generate plan"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# File diff endpoints
+@app.get("/changes")
+async def get_file_changes():
+    """Get summary of all file changes in current session"""
+    return agent.get_file_changes()
+
+
+@app.get("/diff/{path:path}")
+async def get_file_diff(path: str):
+    """Get unified diff for a specific file"""
+    diff = agent.get_file_diff(path)
+    if diff:
+        return {"path": path, "diff": diff}
+    return {"path": path, "diff": None, "message": "No changes for this file"}
+
+
+@app.get("/diffs")
+async def get_all_diffs():
+    """Get all file diffs as unified diff format"""
+    return {"diffs": agent.get_all_diffs()}
+
 
 @app.post("/transpile")
 async def transpile_mcp():

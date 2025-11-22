@@ -1,17 +1,34 @@
 """Main agent loop that coordinates between LLM providers and tools"""
 import json
 import os
+import re
 import importlib.util
 from pathlib import Path
+from typing import Optional
 import httpx
 from .platform_utils import run_command
+from .tool_middleware import ToolMiddleware
+from .models import ToolCall, ToolResult, ToolCallStatus, AgentResponse, AgentPlan
+from .planner import AgentPlanner
+from .file_tracker import FileChangeTracker
 
 class AgentLoop:
     def __init__(self):
         self.tools_dir = Path(__file__).parent.parent / "local_tools"
         self.conversation_history = []
-        self.mode = "chat"  # "chat" or "agent"
+        self.mode = "agent"  # "chat" or "agent" - default to agent mode
         self.workspace_dir: Path | None = None  # Current workspace directory
+
+        # Tool middleware for normalization and validation
+        self.middleware = ToolMiddleware()
+
+        # Agent planner for multi-step operations
+        self.planner = AgentPlanner()
+        self.planning_enabled = True  # Can be toggled
+        self.current_plan: Optional[AgentPlan] = None
+
+        # File change tracker for diff view
+        self.file_tracker = FileChangeTracker()
 
         # Provider configuration
         self.provider = os.getenv("LLM_PROVIDER", "groq")  # groq, ollama, openai
@@ -88,6 +105,8 @@ When you need to perform an action, respond with a JSON block:
 3. Read existing files before modifying them
 4. After tool execution, you'll receive the result and can continue or respond
 5. When you have enough information, provide a helpful response WITHOUT a tool block
+6. **CRITICAL**: For multiline content in write_file, use \\n for newlines. Do NOT use triple quotes or raw strings.
+   Example: {{"tool": "write_file", "args": {{"path": "test.py", "content": "def main():\\n    print('hello')\\n"}}}}
 """
 
     def _get_tools_documentation(self) -> str:
@@ -121,6 +140,7 @@ When you need to perform an action, respond with a JSON block:
             workspace_path = Path(path).resolve()
             if workspace_path.exists() and workspace_path.is_dir():
                 self.workspace_dir = workspace_path
+                self.middleware.set_workspace(workspace_path)
                 print(f"[AgentLoop] Workspace set to: {self.workspace_dir}")
                 return True
         except Exception as e:
@@ -182,6 +202,69 @@ When you need to perform an action, respond with a JSON block:
     def clear_history(self):
         """Clear conversation history for a new session"""
         self.conversation_history = []
+        self.current_plan = None
+        self.file_tracker.clear()
+
+    def get_file_changes(self) -> dict:
+        """Get file changes for diff view"""
+        return self.file_tracker.get_summary()
+
+    def get_file_diff(self, path: str) -> str | None:
+        """Get unified diff for a specific file"""
+        return self.file_tracker.generate_diff(path)
+
+    def get_all_diffs(self) -> str:
+        """Get all file diffs"""
+        return self.file_tracker.generate_all_diffs()
+
+    def set_planning_enabled(self, enabled: bool):
+        """Enable or disable the planning phase"""
+        self.planning_enabled = enabled
+
+    def get_planning_enabled(self) -> bool:
+        """Check if planning phase is enabled"""
+        return self.planning_enabled
+
+    def get_current_plan(self) -> Optional[AgentPlan]:
+        """Get the current execution plan if any"""
+        return self.current_plan
+
+    async def generate_plan(self, user_request: str) -> Optional[AgentPlan]:
+        """Generate an execution plan for a user request"""
+        # Build context for planner
+        workspace = self._get_effective_workspace()
+        context_lines = [f"Workspace: {workspace}"]
+
+        # Get a quick directory listing for context
+        try:
+            items = list(workspace.iterdir())[:20]
+            context_lines.append("Top-level contents:")
+            for item in items:
+                item_type = "dir" if item.is_dir() else "file"
+                context_lines.append(f"  {item_type}: {item.name}")
+        except Exception:
+            pass
+
+        self.planner.set_context("\n".join(context_lines))
+
+        # Generate plan using LLM
+        planning_prompt = self.planner.build_planning_prompt(user_request)
+
+        # Temporarily add planning prompt to get LLM response
+        temp_history = self.conversation_history.copy()
+        self.conversation_history.append({"role": "user", "content": planning_prompt})
+
+        response = await self._call_llm()
+        self.conversation_history = temp_history  # Restore history
+
+        if response:
+            plan = self.planner.parse_plan(response)
+            if plan:
+                self.current_plan = plan
+                print(f"[Planner] Generated plan with {len(plan.steps)} steps")
+                return plan
+
+        return None
 
     async def check_provider_health(self) -> dict:
         """Check if the current provider is available"""
@@ -208,49 +291,92 @@ When you need to perform an action, respond with a JSON block:
         return {"available": False, "provider": "Unknown"}
 
     async def process(self, user_prompt: str) -> dict:
+        """Process a user prompt and return a response.
+
+        Returns:
+            dict with 'response' (str) and 'tool_calls' (list) for API compatibility
+        """
+        print(f"[Agent] Processing prompt in mode: {self.mode}")
+        print(f"[Agent] Workspace: {self.workspace_dir}")
         self.conversation_history.append({"role": "user", "content": user_prompt})
-        tool_calls = []
+        tool_results: list[ToolResult] = []
 
         # Chat mode: simple single response, no tool processing
         if self.mode == "chat":
+            print("[Agent] Running in CHAT mode - no tools")
             response = await self._call_llm()
             if not response:
-                return {"response": f"Failed to get response from {self.provider} - no response received", "tool_calls": []}
+                return self._build_response(
+                    f"Failed to get response from {self.provider} - no response received",
+                    tool_results, 0
+                )
             self.conversation_history.append({"role": "assistant", "content": response})
-            return {"response": response, "tool_calls": []}
+            return self._build_response(response, tool_results, 0)
 
         # Agent mode: allow tool calling
+        print("[Agent] Running in AGENT mode - tools enabled!")
         max_iterations = 15
         response = ""
         for iteration in range(max_iterations):
+            print(f"[Agent] Iteration {iteration + 1} starting...")
             response = await self._call_llm()
+            print(f"[Agent] Got LLM response of length: {len(response) if response else 0}")
             if not response:
-                return {"response": f"Failed to get response from {self.provider} - no response received", "tool_calls": tool_calls}
+                return self._build_response(
+                    f"Failed to get response from {self.provider} - no response received",
+                    tool_results, iteration
+                )
 
             tool_call = self._extract_tool_call(response)
 
             if tool_call:
-                print(f"[Agent] Iteration {iteration + 1}: Executing tool '{tool_call.get('tool')}'")
-                tool_result = await self._execute_tool(tool_call)
-                tool_calls.append({
-                    "tool": tool_call["tool"],
-                    "args": tool_call.get("args", {}),
-                    "result": tool_result
-                })
+                # Normalize tool call through middleware
+                normalized_call, warnings = self.middleware.normalize_tool_call(tool_call)
+                for warning in warnings:
+                    print(f"[Middleware] {warning}")
+
+                tool_name = normalized_call.get("tool", "unknown")
+                tool_args = normalized_call.get("args", {})
+
+                print(f"[Agent] Iteration {iteration + 1}: Executing tool '{tool_name}'")
+                result_text = await self._execute_tool(normalized_call)
+
+                # Determine status based on result
+                status = ToolCallStatus.ERROR if result_text.startswith("Error:") else ToolCallStatus.SUCCESS
+
+                tool_results.append(ToolResult(
+                    tool=tool_name,
+                    args=tool_args,
+                    result=result_text,
+                    status=status,
+                    warnings=warnings
+                ))
+
                 self.conversation_history.append({"role": "assistant", "content": response})
-                self.conversation_history.append({"role": "user", "content": f"Tool result:\n{tool_result}"})
+                self.conversation_history.append({"role": "user", "content": f"Tool result:\n{result_text}"})
             else:
                 # No tool call found - this is the final response
                 self.conversation_history.append({"role": "assistant", "content": response})
-                # Clean the response to remove any tool block syntax for cleaner display
                 clean_response = self._clean_response(response)
-                return {"response": clean_response, "tool_calls": tool_calls}
+                return self._build_response(clean_response, tool_results, iteration + 1)
 
         # Only reached if we hit max iterations without getting a final response
         clean_response = self._clean_response(response)
+        return self._build_response(
+            f"I've completed {max_iterations} tool operations. Here's what I found:\n\n{clean_response}",
+            tool_results, max_iterations
+        )
+
+    def _build_response(self, response: str, tool_results: list[ToolResult], iterations: int) -> dict:
+        """Build API-compatible response dict from structured data"""
         return {
-            "response": f"I've completed {max_iterations} tool operations. Here's what I found:\n\n{clean_response}",
-            "tool_calls": tool_calls
+            "response": response,
+            "tool_calls": [
+                {"tool": tr.tool, "args": tr.args, "result": tr.result}
+                for tr in tool_results
+            ],
+            "iterations": iterations,
+            "mode": self.mode
         }
 
     async def _call_llm(self) -> str:
@@ -325,30 +451,64 @@ When you need to perform an action, respond with a JSON block:
 
     def _extract_tool_call(self, response: str) -> dict | None:
         """Extract tool call JSON from response"""
+        print(f"[Tool Extract] Looking for tool call in response of length {len(response)}")
+        print(f"[Tool Extract] Response preview: {response[:500]}...")
+
         try:
             # Try different code block formats that LLMs might use
             for marker in ["```tool", "```json", "```"]:
                 if marker in response:
+                    print(f"[Tool Extract] Found marker: {marker}")
                     start = response.find(marker) + len(marker)
                     end = response.find("```", start)
                     if end > start:
                         json_str = response[start:end].strip()
+                        print(f"[Tool Extract] Extracted JSON string: {json_str[:200]}...")
                         # Skip if it doesn't look like a tool call JSON
                         if not json_str.startswith("{"):
+                            print(f"[Tool Extract] Skipping - doesn't start with {{")
                             continue
+
+                        # Fix Python triple-quoted strings in JSON (""" or ''')
+                        # Replace them with escaped newlines
+                        json_str = self._fix_multiline_json(json_str)
+
                         parsed = json.loads(json_str)
                         # Validate it has required tool structure
                         if isinstance(parsed, dict) and "tool" in parsed:
+                            print(f"[Tool Extract] Successfully parsed tool call: {parsed.get('tool')}")
                             return parsed
+                        else:
+                            print(f"[Tool Extract] Parsed but missing 'tool' key: {parsed.keys()}")
         except json.JSONDecodeError as e:
             print(f"[Tool Parse Error] Invalid JSON: {e}")
         except Exception as e:
             print(f"[Tool Parse Error] Unexpected error: {e}")
+
+        print("[Tool Extract] No tool call found")
         return None
+
+    def _fix_multiline_json(self, json_str: str) -> str:
+        """Fix Python triple-quoted strings in JSON by converting them to valid JSON strings"""
+        import re
+
+        # Pattern to match: "key": """multiline content"""
+        # We need to replace the triple-quoted strings with properly escaped JSON strings
+        def replace_triple_quotes(match):
+            key = match.group(1)
+            content = match.group(2)
+            # Escape the content for JSON
+            escaped = content.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+            return f'"{key}": "{escaped}"'
+
+        # Match both """ and ''' variants
+        json_str = re.sub(r'"(\w+)":\s*"""(.*?)"""', replace_triple_quotes, json_str, flags=re.DOTALL)
+        json_str = re.sub(r'"(\w+)":\s*\'\'\'(.*?)\'\'\'', replace_triple_quotes, json_str, flags=re.DOTALL)
+
+        return json_str
 
     def _clean_response(self, response: str) -> str:
         """Remove tool blocks from response for cleaner display"""
-        import re
         # Remove ```tool ... ``` blocks
         cleaned = re.sub(r'```tool\s*\{[^`]*\}\s*```', '', response, flags=re.DOTALL)
         # Remove ```json ... ``` blocks that look like tool calls
@@ -360,34 +520,14 @@ When you need to perform an action, respond with a JSON block:
         return cleaned.strip()
 
     async def _execute_tool(self, tool_call: dict) -> str:
-        """Execute a tool and return the result"""
+        """Execute a tool and return the result.
+
+        Note: Tool call should already be normalized by middleware before reaching here.
+        """
         tool_name = tool_call.get("tool", "")
         args = tool_call.get("args", {})
 
         print(f"[Tool Execute] {tool_name} with args: {args}")
-
-        # Normalize tool name aliases
-        tool_aliases = {
-            "create_file": "write_file",
-            "save_file": "write_file",
-            "ls": "list_directory",
-            "dir": "list_directory",
-            "cat": "read_file",
-            "view_file": "read_file",
-            "exec": "run_command",
-            "execute": "run_command",
-            "shell": "run_command",
-            "bash": "run_command",
-            "mkdir": "create_directory",
-            "rm": "delete_file",
-            "remove": "delete_file",
-            "find": "search_files",
-            "grep": "grep_files",
-        }
-        original_name = tool_name
-        tool_name = tool_aliases.get(tool_name, tool_name)
-        if original_name != tool_name:
-            print(f"[Tool Alias] '{original_name}' -> '{tool_name}'")
 
         try:
             # Built-in tools
@@ -409,21 +549,15 @@ When you need to perform an action, respond with a JSON block:
                 return "\n".join(output)
 
             # File system tools with workspace awareness
+            # Note: Middleware already normalized argument names to canonical form
             if tool_name == "list_directory":
-                # Accept path, directory, or dir as the argument name
-                dir_path = args.get("path") or args.get("directory") or args.get("dir") or "."
-                return self._tool_list_directory(dir_path)
+                return self._tool_list_directory(args.get("path", "."))
 
             if tool_name == "read_file":
-                # Accept path, filename, or file as the argument name
-                file_path = args.get("path") or args.get("filename") or args.get("file") or ""
-                return self._tool_read_file(file_path)
+                return self._tool_read_file(args.get("path", ""))
 
             if tool_name == "write_file":
-                # Accept path, filename, or file as the argument name
-                file_path = args.get("path") or args.get("filename") or args.get("file") or ""
-                content = args.get("content") or args.get("text") or args.get("data") or ""
-                return self._tool_write_file(file_path, content)
+                return self._tool_write_file(args.get("path", ""), args.get("content", ""))
 
             # Dynamic tool loading from local_tools directory
             tool_path = self.tools_dir / f"{tool_name}.py"
@@ -480,8 +614,13 @@ When you need to perform an action, respond with a JSON block:
                 return "Error: No file path provided"
 
             resolved = self._resolve_path(path)
-            if not resolved.exists():
+            exists = resolved.exists()
+
+            if not exists:
+                # Track that file doesn't exist (for new file creation)
+                self.file_tracker.record_read(path, "", exists=False)
                 return f"Error: File '{path}' does not exist"
+
             if not resolved.is_file():
                 return f"Error: '{path}' is not a file"
 
@@ -491,6 +630,10 @@ When you need to perform an action, respond with a JSON block:
                 return f"Error: File '{path}' is too large ({size} bytes). Maximum is 100KB."
 
             content = resolved.read_text(encoding='utf-8', errors='replace')
+
+            # Track original content for diff
+            self.file_tracker.record_read(path, content, exists=True)
+
             return f"Contents of '{path}':\n```\n{content}\n```"
         except PermissionError:
             return f"Error: Permission denied reading '{path}'"
@@ -507,10 +650,22 @@ When you need to perform an action, respond with a JSON block:
 
             resolved = self._resolve_path(path)
 
+            # Check if file exists and track original content if not already tracked
+            if resolved.exists() and path not in self.file_tracker.tracked_files:
+                try:
+                    original = resolved.read_text(encoding='utf-8', errors='replace')
+                    self.file_tracker.record_read(path, original, exists=True)
+                except Exception:
+                    pass
+
             # Create parent directories if needed
             resolved.parent.mkdir(parents=True, exist_ok=True)
 
             resolved.write_text(content, encoding='utf-8')
+
+            # Track new content for diff
+            self.file_tracker.record_write(path, content)
+
             return f"Successfully wrote {len(content)} characters to '{path}'"
         except PermissionError:
             return f"Error: Permission denied writing to '{path}'"
