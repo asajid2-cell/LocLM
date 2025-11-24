@@ -1,6 +1,10 @@
+using System;
+using System.IO;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using CommunityToolkit.Mvvm.Input;
 using LocLM.Services;
 using LocLM.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +21,20 @@ public partial class MainWindow : Window
         InitializeComponent();
         _keyboardService = App.Services?.GetService<IKeyboardService>();
         KeyDown += OnWindowKeyDown;
+        Opened += (_, __) => AppLog("MainWindow opened");
+        Closing += (_, __) => AppLog("MainWindow closing");
+    }
+
+    private void AppLog(string message)
+    {
+        try
+        {
+            var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocLM");
+            Directory.CreateDirectory(folder);
+            var path = Path.Combine(folder, "startup.log");
+            File.AppendAllText(path, $"{DateTime.Now:O} {message}{Environment.NewLine}");
+        }
+        catch { }
     }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
@@ -355,27 +373,25 @@ public partial class MainWindow : Window
         }
     }
 
-    private void InputTextBox_KeyDown(object? sender, KeyEventArgs e)
+    private async void InputTextBox_KeyDown(object? sender, KeyEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;
 
-        // Ctrl+Enter or just Enter (without Shift) sends the message
-        if (e.Key == Key.Enter)
+        // Ctrl+Enter always sends, Enter sends when Shift is not held (Shift+Enter = newline)
+        if (e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
-            {
-                // Ctrl+Enter sends the message
-                e.Handled = true;
-                vm.SendMessageCommand.Execute(null);
-            }
-            else if (!e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-            {
-                // Enter alone sends the message
-                e.Handled = true;
-                vm.SendMessageCommand.Execute(null);
-            }
-            // Shift+Enter allows new line (default TextBox behavior)
+            e.Handled = true;
+            await ExecuteSendAsync(vm);
+            return;
         }
+
+        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            e.Handled = true;
+            await ExecuteSendAsync(vm);
+            return;
+        }
+        // Shift+Enter falls through for newline
     }
 
     private void TerminalInput_KeyDown(object? sender, KeyEventArgs e)
@@ -387,6 +403,19 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             vm.TerminalManager.ActiveTerminal?.ExecuteCommandCommand.Execute(null);
+        }
+    }
+
+    private static async Task ExecuteSendAsync(MainWindowViewModel vm)
+    {
+        if (vm.SendMessageCommand is IAsyncRelayCommand asyncCmd)
+        {
+            if (asyncCmd.CanExecute(null))
+                await asyncCmd.ExecuteAsync(null);
+        }
+        else if (vm.SendMessageCommand.CanExecute(null))
+        {
+            vm.SendMessageCommand.Execute(null);
         }
     }
 }

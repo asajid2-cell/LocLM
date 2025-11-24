@@ -26,6 +26,12 @@ public partial class TerminalViewModel : ObservableObject
     [ObservableProperty]
     private bool _isExecuting;
 
+    [ObservableProperty]
+    private int _commandTimeoutMs = 60000;
+
+    [ObservableProperty]
+    private int _perCommandTimeoutMs = 60000;
+
     public ObservableCollection<TerminalLine> OutputLines { get; } = new();
 
     public TerminalViewModel(ITerminalService terminal)
@@ -68,7 +74,8 @@ public partial class TerminalViewModel : ObservableObject
 
         try
         {
-            var result = await _terminal.ExecuteCommandAsync(command, WorkingDirectory);
+            var timeout = PerCommandTimeoutMs > 0 ? PerCommandTimeoutMs : CommandTimeoutMs;
+            var result = await _terminal.ExecuteCommandAsync(command, WorkingDirectory, timeout);
 
             if (result.ExitCode != 0 && !string.IsNullOrEmpty(result.StdErr))
             {

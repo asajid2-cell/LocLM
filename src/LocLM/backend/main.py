@@ -17,10 +17,12 @@ from agent.models import (
     ToolResult, ToolCallStatus
 )
 from dotenv import load_dotenv
+import traceback
 
 # Load environment variables from project root .env if present
 ROOT_DIR = Path(__file__).resolve().parents[3]
 load_dotenv(ROOT_DIR / ".env")
+LOG_FILE = ROOT_DIR / "backend_error.log"
 
 app = FastAPI(title="LocLM Backend", version="0.1.0")
 
@@ -32,6 +34,19 @@ app.add_middleware(
 )
 
 agent = AgentLoop()
+
+
+def log_error(context: str, exc: Exception):
+    """Persist backend errors for easier debugging."""
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{context}] {exc}\n")
+            f.write("".join(traceback.format_exception(exc)))
+            f.write("\n")
+    except Exception:
+        # Avoid breaking request flow if logging fails
+        pass
 
 class PromptRequest(BaseModel):
     prompt: str
@@ -111,10 +126,17 @@ async def chat(request: PromptRequest):
         result = await agent.process(request.prompt)
         return ChatResponse(
             response=result.get("response", ""),
-            tool_calls=result.get("tool_calls", [])
+            tool_calls=result.get("tool_calls", []),
+            model=agent.get_model_info()
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log_error("chat", e)
+        # Return a safe response so the UI can display the error without throwing
+        return ChatResponse(
+            response=f"Backend error: {str(e)}",
+            tool_calls=[],
+            model=agent.get_model_info()
+        )
 
 @app.get("/tools")
 async def list_tools():
@@ -176,6 +198,7 @@ async def generate_plan(request: PromptRequest):
             }
         return {"status": "error", "message": "Could not generate plan"}
     except Exception as e:
+        log_error("plan", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

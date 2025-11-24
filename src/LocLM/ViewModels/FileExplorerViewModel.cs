@@ -31,6 +31,7 @@ public partial class FileExplorerViewModel : ObservableObject
     private bool _isLoading;
 
     public ObservableCollection<FileTreeItem> RootItems { get; } = new();
+    public bool LastLoadSucceeded { get; private set; }
 
     public event Action<string, string>? OnFileOpened;
 
@@ -41,6 +42,7 @@ public partial class FileExplorerViewModel : ObservableObject
 
     public async Task LoadDirectoryAsync(string path)
     {
+        LastLoadSucceeded = false;
         try
         {
             if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
@@ -74,13 +76,19 @@ public partial class FileExplorerViewModel : ObservableObject
                 IsExpanded = true
             };
 
-            await root.LoadChildrenAsync();
+        await root.LoadChildrenAsync();
 
-            // Only add if valid
-            if (Directory.Exists(path))
+        // Only add if valid
+        if (Directory.Exists(path))
+        {
+            RootItems.Add(root);
+            LastLoadSucceeded = true;
+            System.Diagnostics.Debug.WriteLine($"[FileExplorer] Loaded '{path}' with {root.Children.Count} children");
+            if (root.Children.Count == 0)
             {
-                RootItems.Add(root);
+                System.Diagnostics.Debug.WriteLine("[FileExplorer] Directory exists but returned no children (may be filtered/hidden).");
             }
+        }
         }
         catch (Exception ex)
         {
@@ -100,14 +108,7 @@ public partial class FileExplorerViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private async Task RefreshAsync()
-    {
-        await RefreshCurrentDirectoryAsync();
-    }
-
-    [RelayCommand]
-    private async Task ToggleExpandAsync(FileTreeItem item)
+    private async Task ExpandOrCollapseAsync(FileTreeItem item)
     {
         if (!item.IsDirectory)
             return;
@@ -122,6 +123,21 @@ public partial class FileExplorerViewModel : ObservableObject
             item.IsExpanded = true;
             await item.LoadChildrenAsync();
         }
+    }
+
+    [RelayCommand]
+    private async Task RefreshAsync()
+    {
+        await RefreshCurrentDirectoryAsync();
+    }
+
+    [RelayCommand]
+    private async Task ToggleExpandAsync(FileTreeItem item)
+    {
+        if (!item.IsDirectory)
+            return;
+
+        await ExpandOrCollapseAsync(item);
     }
 
     public async Task SelectItemAsync(FileTreeItem item)
@@ -144,8 +160,7 @@ public partial class FileExplorerViewModel : ObservableObject
 
             if (item.IsDirectory)
             {
-                // Toggle expand/collapse for directories
-                await ToggleExpandAsync(item);
+                await ExpandOrCollapseAsync(item);
             }
             else
             {

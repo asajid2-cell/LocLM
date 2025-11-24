@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -8,7 +9,7 @@ namespace LocLM.ViewModels;
 
 public partial class TerminalManagerViewModel : ObservableObject
 {
-    private readonly ITerminalService _terminalService;
+    private readonly Func<ITerminalService> _terminalFactory;
     private int _terminalCounter = 1;
 
     [ObservableProperty]
@@ -19,9 +20,9 @@ public partial class TerminalManagerViewModel : ObservableObject
 
     public ObservableCollection<TerminalViewModel> Terminals { get; } = new();
 
-    public TerminalManagerViewModel(ITerminalService terminalService)
+    public TerminalManagerViewModel(Func<ITerminalService> terminalFactory)
     {
-        _terminalService = terminalService;
+        _terminalFactory = terminalFactory;
 
         // Create initial terminal
         CreateNewTerminal();
@@ -32,7 +33,8 @@ public partial class TerminalManagerViewModel : ObservableObject
     [RelayCommand]
     private void CreateNewTerminal()
     {
-        var terminal = new TerminalViewModel(_terminalService)
+        var terminalService = _terminalFactory();
+        var terminal = new TerminalViewModel(terminalService)
         {
             Name = $"Terminal {_terminalCounter++}"
         };

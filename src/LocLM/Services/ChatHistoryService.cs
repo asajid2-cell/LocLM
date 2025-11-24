@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using LocLM.Models;
@@ -11,75 +12,144 @@ public class ChatHistoryService : IChatHistoryService
 {
     private readonly string _dbPath;
     private readonly string _connectionString;
+    private readonly SemaphoreSlim _mutex = new(1, 1);
+    private const int SchemaVersion = 1;
+    private const int MaxSessions = 200;
 
     public ChatHistoryService()
     {
         var appDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocLM");
         Directory.CreateDirectory(appDataFolder);
         _dbPath = Path.Combine(appDataFolder, "chat_history.db");
-        _connectionString = $"Data Source={_dbPath}";
+        _connectionString = $"Data Source={_dbPath};Cache=Shared;Pooling=True";
     }
 
     public async Task InitializeAsync()
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
+        using var connection = await OpenAsync();
 
-        var createSessionsTable = @"
-            CREATE TABLE IF NOT EXISTS ChatSessions (
-                Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                Title TEXT NOT NULL,
-                CreatedAt TEXT NOT NULL,
-                UpdatedAt TEXT NOT NULL,
-                ModelName TEXT NOT NULL,
-                Mode TEXT NOT NULL
-            )";
+        await EnableWalAsync(connection);
+        await RunMigrationsAsync(connection);
+        await ApplyRetentionAsync(connection);
+    }
 
-        var createMessagesTable = @"
-            CREATE TABLE IF NOT EXISTS ChatMessages (
-                Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                SessionId INTEGER NOT NULL,
-                Role TEXT NOT NULL,
-                Content TEXT NOT NULL,
-                CreatedAt TEXT NOT NULL,
-                FOREIGN KEY (SessionId) REFERENCES ChatSessions(Id) ON DELETE CASCADE
-            )";
+    private async Task<SqliteConnection> OpenAsync()
+    {
+        var conn = new SqliteConnection(_connectionString);
+        await conn.OpenAsync();
+        return conn;
+    }
 
-        var createIndexCommand = @"
-            CREATE INDEX IF NOT EXISTS idx_messages_session ON ChatMessages(SessionId);
-            CREATE INDEX IF NOT EXISTS idx_sessions_updated ON ChatSessions(UpdatedAt DESC);
-        ";
+    private static async Task EnableWalAsync(SqliteConnection connection)
+    {
+        using var wal = connection.CreateCommand();
+        wal.CommandText = "PRAGMA journal_mode=WAL;";
+        await wal.ExecuteNonQueryAsync();
+    }
 
-        using var command = connection.CreateCommand();
-        command.CommandText = createSessionsTable;
-        await command.ExecuteNonQueryAsync();
+    private static async Task RunMigrationsAsync(SqliteConnection connection)
+    {
+        // Ensure migrations table
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = @"CREATE TABLE IF NOT EXISTS Migrations (Version INTEGER PRIMARY KEY);";
+            await cmd.ExecuteNonQueryAsync();
+        }
 
-        command.CommandText = createMessagesTable;
-        await command.ExecuteNonQueryAsync();
+        var currentVersion = 0;
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "SELECT IFNULL(MAX(Version),0) FROM Migrations;";
+            var result = await cmd.ExecuteScalarAsync();
+            currentVersion = Convert.ToInt32(result);
+        }
 
-        command.CommandText = createIndexCommand;
-        await command.ExecuteNonQueryAsync();
+        // Apply migrations incrementally
+        if (currentVersion < 1)
+        {
+            var createSessionsTable = @"
+                CREATE TABLE IF NOT EXISTS ChatSessions (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Title TEXT NOT NULL,
+                    CreatedAt TEXT NOT NULL,
+                    UpdatedAt TEXT NOT NULL,
+                    ModelName TEXT NOT NULL,
+                    Mode TEXT NOT NULL
+                );";
+
+            var createMessagesTable = @"
+                CREATE TABLE IF NOT EXISTS ChatMessages (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    SessionId INTEGER NOT NULL,
+                    Role TEXT NOT NULL,
+                    Content TEXT NOT NULL,
+                    CreatedAt TEXT NOT NULL,
+                    FOREIGN KEY (SessionId) REFERENCES ChatSessions(Id) ON DELETE CASCADE
+                );";
+
+            var createIndexCommand = @"
+                CREATE INDEX IF NOT EXISTS idx_messages_session ON ChatMessages(SessionId);
+                CREATE INDEX IF NOT EXISTS idx_sessions_updated ON ChatSessions(UpdatedAt DESC);";
+
+            using var command = connection.CreateCommand();
+            command.CommandText = createSessionsTable;
+            await command.ExecuteNonQueryAsync();
+
+            command.CommandText = createMessagesTable;
+            await command.ExecuteNonQueryAsync();
+
+            command.CommandText = createIndexCommand;
+            await command.ExecuteNonQueryAsync();
+
+            using var insertVersion = connection.CreateCommand();
+            insertVersion.CommandText = "INSERT INTO Migrations (Version) VALUES (1);";
+            await insertVersion.ExecuteNonQueryAsync();
+        }
+    }
+
+    private static async Task ApplyRetentionAsync(SqliteConnection connection)
+    {
+        // Limit session count
+        using var deleteOld = connection.CreateCommand();
+        deleteOld.CommandText = @"
+            DELETE FROM ChatSessions WHERE Id IN (
+                SELECT Id FROM ChatSessions ORDER BY UpdatedAt DESC LIMIT -1 OFFSET @keep
+            );";
+        deleteOld.Parameters.AddWithValue("@keep", MaxSessions);
+        await deleteOld.ExecuteNonQueryAsync();
+
+        // Vacuum occasionally
+        using var vacuum = connection.CreateCommand();
+        vacuum.CommandText = "VACUUM;";
+        await vacuum.ExecuteNonQueryAsync();
     }
 
     public async Task<int> CreateSessionAsync(string title, string modelName, string mode)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
+        await _mutex.WaitAsync();
+        try
+        {
+            using var connection = await OpenAsync();
 
-        var now = DateTime.UtcNow.ToString("o");
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            INSERT INTO ChatSessions (Title, CreatedAt, UpdatedAt, ModelName, Mode)
-            VALUES (@title, @now, @now, @modelName, @mode);
-            SELECT last_insert_rowid();
-        ";
-        command.Parameters.AddWithValue("@title", title);
-        command.Parameters.AddWithValue("@now", now);
-        command.Parameters.AddWithValue("@modelName", modelName);
-        command.Parameters.AddWithValue("@mode", mode);
+            var now = DateTime.UtcNow.ToString("o");
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO ChatSessions (Title, CreatedAt, UpdatedAt, ModelName, Mode)
+                VALUES (@title, @now, @now, @modelName, @mode);
+                SELECT last_insert_rowid();
+            ";
+            command.Parameters.AddWithValue("@title", title);
+            command.Parameters.AddWithValue("@now", now);
+            command.Parameters.AddWithValue("@modelName", modelName);
+            command.Parameters.AddWithValue("@mode", mode);
 
-        var result = await command.ExecuteScalarAsync();
-        return Convert.ToInt32(result);
+            var result = await command.ExecuteScalarAsync();
+            return Convert.ToInt32(result);
+        }
+        finally
+        {
+            _mutex.Release();
+        }
     }
 
     public async Task<List<ChatSession>> GetAllSessionsAsync()
@@ -87,8 +157,7 @@ public class ChatHistoryService : IChatHistoryService
         var sessions = new List<ChatSession>();
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
+            using var connection = await OpenAsync();
 
             using var command = connection.CreateCommand();
             command.CommandText = "SELECT Id, Title, CreatedAt, UpdatedAt, ModelName, Mode FROM ChatSessions ORDER BY UpdatedAt DESC LIMIT 100";
@@ -116,8 +185,7 @@ public class ChatHistoryService : IChatHistoryService
 
     public async Task<ChatSession?> GetSessionAsync(int sessionId)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
+        using var connection = await OpenAsync();
 
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT Id, Title, CreatedAt, UpdatedAt, ModelName, Mode FROM ChatSessions WHERE Id = @id";
@@ -141,8 +209,7 @@ public class ChatHistoryService : IChatHistoryService
 
     public async Task UpdateSessionAsync(int sessionId, string title)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
+        using var connection = await OpenAsync();
 
         using var command = connection.CreateCommand();
         command.CommandText = "UPDATE ChatSessions SET Title = @title, UpdatedAt = @now WHERE Id = @id";
@@ -157,8 +224,7 @@ public class ChatHistoryService : IChatHistoryService
     {
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
+            using var connection = await OpenAsync();
 
             // Delete messages first (cascade doesn't always work with SQLite)
             using var deleteMessages = connection.CreateCommand();
@@ -214,8 +280,7 @@ public class ChatHistoryService : IChatHistoryService
 
     public async Task<List<ChatMessage>> GetSessionMessagesAsync(int sessionId)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
+        using var connection = await OpenAsync();
 
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT Id, SessionId, Role, Content, CreatedAt FROM ChatMessages WHERE SessionId = @sessionId ORDER BY CreatedAt ASC";
@@ -239,8 +304,7 @@ public class ChatHistoryService : IChatHistoryService
 
     public async Task UpdateSessionTimestampAsync(int sessionId)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
+        using var connection = await OpenAsync();
 
         using var command = connection.CreateCommand();
         command.CommandText = "UPDATE ChatSessions SET UpdatedAt = @now WHERE Id = @id";

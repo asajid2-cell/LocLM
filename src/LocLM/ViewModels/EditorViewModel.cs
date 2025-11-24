@@ -22,6 +22,35 @@ public partial class EditorViewModel : ObservableObject
     public ObservableCollection<EditorTab> Tabs { get; } = new();
     public ObservableCollection<EditorTab> OpenFiles => Tabs;
 
+    [ObservableProperty]
+    private bool _showLineNumbers = true;
+
+    [ObservableProperty]
+    private double _editorFontSize = 12;
+
+    [RelayCommand]
+    private void IncreaseFontSize()
+    {
+        if (EditorFontSize < 18)
+            EditorFontSize += 1;
+    }
+
+    [RelayCommand]
+    private void DecreaseFontSize()
+    {
+        if (EditorFontSize > 10)
+            EditorFontSize -= 1;
+    }
+
+    [RelayCommand]
+    private async Task OpenFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return;
+
+        await OpenFileAsync(filePath);
+    }
+
     public string CurrentFileContent
     {
         get => ActiveTab?.Content ?? string.Empty;
@@ -74,15 +103,21 @@ public partial class EditorViewModel : ObservableObject
 
             // Additional safety check for line count
             var lineCount = content.Split('\n').Length;
+            var truncated = false;
             if (lineCount > 50000)
             {
                 System.Diagnostics.Debug.WriteLine($"File has too many lines: {lineCount} (max 50000)");
                 // Truncate to first 50000 lines
                 var lines = content.Split('\n').Take(50000);
                 content = string.Join("\n", lines) + "\n\n[... File truncated for performance ...]";
+                truncated = true;
             }
 
-            var tab = new EditorTab(filePath, content);
+            var tab = new EditorTab(filePath, content)
+            {
+                IsTruncated = truncated,
+                LastWriteTimeUtc = fileInfo.LastWriteTimeUtc
+            };
             Tabs.Add(tab);
             SetActiveTab(tab);
         }
@@ -142,11 +177,31 @@ public partial class EditorViewModel : ObservableObject
         if (ActiveTab == null || !ActiveTab.IsDirty)
             return;
 
+        if (ActiveTab.IsTruncated)
+        {
+            System.Diagnostics.Debug.WriteLine("Save blocked: file was truncated when opened. Reload the full file before saving.");
+            return;
+        }
+
+        // Detect external changes
+        if (File.Exists(ActiveTab.FilePath))
+        {
+            var diskTime = File.GetLastWriteTimeUtc(ActiveTab.FilePath);
+            if (diskTime > ActiveTab.LastWriteTimeUtc)
+            {
+                ActiveTab.IsStale = true;
+                System.Diagnostics.Debug.WriteLine("Save blocked: file changed on disk. Reload before saving.");
+                return;
+            }
+        }
+
         try
         {
             await _fileSystem.WriteFileAsync(ActiveTab.FilePath, ActiveTab.Content);
             ActiveTab.IsDirty = false;
             ActiveTab.OriginalContent = ActiveTab.Content;
+            ActiveTab.LastWriteTimeUtc = File.GetLastWriteTimeUtc(ActiveTab.FilePath);
+            ActiveTab.IsStale = false;
         }
         catch (Exception ex)
         {
@@ -189,6 +244,9 @@ public partial class EditorTab : ObservableObject
     public string FileName { get; }
     public string FileExtension { get; }
     public string Language { get; }
+    public bool IsTruncated { get; set; }
+    public bool IsStale { get; set; }
+    public DateTime LastWriteTimeUtc { get; set; }
 
     [ObservableProperty]
     private string _content;
@@ -202,7 +260,8 @@ public partial class EditorTab : ObservableObject
     public string OriginalContent { get; set; }
 
     public string Icon => GetFileIcon(FileName);
-    public string Title => IsDirty ? $"{FileName} *" : FileName;
+    public string Title
+        => $"{(IsDirty ? "*" : string.Empty)}{FileName}{(IsTruncated ? " (truncated)" : string.Empty)}{(IsStale ? " (disk changed)" : string.Empty)}";
 
     // Line numbers for display
     public string LineNumbers => GenerateLineNumbers(Content);

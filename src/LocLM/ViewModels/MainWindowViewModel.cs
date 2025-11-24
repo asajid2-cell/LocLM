@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LocLM.Services;
+using System.Text.Json;
+using Avalonia.Platform.Storage;
 
 namespace LocLM.ViewModels;
 
@@ -18,6 +21,10 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IChatHistoryService _chatHistory;
     private readonly System.Threading.CancellationTokenSource _cancellationTokenSource = new();
     private bool _workspaceInitialized = false;
+    private readonly string _settingsPath;
+    private int _backendRetryDelayMs = 3000;
+    private bool _autoRetryBackend = true;
+    private string _preflightStatus = string.Empty;
 
     [ObservableProperty]
     private string _inputText = string.Empty;
@@ -134,13 +141,20 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private bool _isTerminalMenuOpen;
 
-    public MainWindowViewModel(IAgentService agentService, IPythonBackendService pythonBackend, IOllamaService ollamaService, IFileSystemService fileSystem, IKeyboardService keyboardService, IChatHistoryService chatHistory, ITerminalService terminal)
+    [ObservableProperty]
+    private bool _isBackendErrorVisible;
+
+    [ObservableProperty]
+    private string _backendErrorMessage = string.Empty;
+
+    public MainWindowViewModel(IAgentService agentService, IPythonBackendService pythonBackend, IOllamaService ollamaService, IFileSystemService fileSystem, IKeyboardService keyboardService, IChatHistoryService chatHistory, Func<ITerminalService> terminalFactory)
     {
         _agentService = agentService;
         _pythonBackend = pythonBackend;
         _ollamaService = ollamaService;
         _fileSystem = fileSystem;
         _chatHistory = chatHistory;
+        _settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocLM", "user_settings.json");
 
         // Initialize keyboard shortcuts
         KeyboardShortcuts = new KeyboardShortcutsViewModel(keyboardService);
@@ -151,9 +165,14 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Initialize editor
         Editor = new EditorViewModel(fileSystem);
+        Editor.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(Editor.ShowLineNumbers) or nameof(Editor.EditorFontSize))
+                SaveSettings();
+        };
 
         // Initialize terminal manager
-        TerminalManager = new TerminalManagerViewModel(terminal);
+        TerminalManager = new TerminalManagerViewModel(terminalFactory);
 
         // Initialize chat history
         ChatHistory = new ChatHistoryViewModel(chatHistory, this);
@@ -185,6 +204,57 @@ public partial class MainWindowViewModel : ObservableObject
         // Check connection periodically
         _ = CheckConnectionLoop();
         _ = CheckOllamaStatus();
+
+        LoadSettings();
+    }
+
+    private void LoadSettings()
+    {
+        try
+        {
+            if (File.Exists(_settingsPath))
+            {
+                var json = File.ReadAllText(_settingsPath);
+                var settings = JsonSerializer.Deserialize<UserSettings>(json);
+                if (settings != null)
+                {
+                    ShowSidebar = settings.ShowSidebar;
+                    Editor.ShowLineNumbers = settings.ShowLineNumbers;
+                    Editor.EditorFontSize = settings.EditorFontSize;
+                    if (TerminalManager.ActiveTerminal != null && settings.CommandTimeoutMs > 0)
+                    {
+                        TerminalManager.ActiveTerminal.CommandTimeoutMs = settings.CommandTimeoutMs;
+                        TerminalManager.ActiveTerminal.PerCommandTimeoutMs = settings.PerCommandTimeoutMs > 0 ? settings.PerCommandTimeoutMs : settings.CommandTimeoutMs;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Settings] Failed to load settings: {ex.Message}");
+        }
+    }
+
+    private void SaveSettings()
+    {
+        try
+        {
+            var settings = new UserSettings
+            {
+                ShowSidebar = ShowSidebar,
+                ShowLineNumbers = Editor.ShowLineNumbers,
+                EditorFontSize = Editor.EditorFontSize,
+                CommandTimeoutMs = TerminalManager.ActiveTerminal?.CommandTimeoutMs ?? 60000,
+                PerCommandTimeoutMs = TerminalManager.ActiveTerminal?.PerCommandTimeoutMs ?? 60000
+            };
+            Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+            var json = JsonSerializer.Serialize(settings);
+            File.WriteAllText(_settingsPath, json);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Settings] Failed to save settings: {ex.Message}");
+        }
     }
 
     private static string? FindWorkspaceRoot()
@@ -265,16 +335,35 @@ public partial class MainWindowViewModel : ObservableObject
                     // Don't crash on connection errors
                     System.Diagnostics.Debug.WriteLine($"[Connection Error] {ex.Message}");
                     IsConnected = false;
+                    BackendErrorMessage = $"Connection error: {ex.Message}";
+                    IsBackendErrorVisible = true;
                 }
 
-                // Use cancellable delay
-                await Task.Delay(5000, _cancellationTokenSource.Token);
+                // Use cancellable delay with optional auto-retry backoff
+                var delay = _autoRetryBackend ? _backendRetryDelayMs : 5000;
+                await Task.Delay(delay, _cancellationTokenSource.Token);
+
+                // Backoff up to 15s
+                if (_autoRetryBackend && _backendRetryDelayMs < 15000)
+                    _backendRetryDelayMs = Math.Min(15000, _backendRetryDelayMs + 2000);
             }
         }
         catch (OperationCanceledException)
         {
             // Normal cancellation, exit gracefully
         }
+    }
+
+    private async Task RunPreflightAsync()
+    {
+        var groqKey = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+        if (string.IsNullOrWhiteSpace(groqKey))
+        {
+            BackendErrorMessage = "Missing GROQ_API_KEY. Add it to your environment or .env file.";
+            IsBackendErrorVisible = true;
+        }
+
+        await CheckOllamaStatus();
     }
 
     [RelayCommand]
@@ -297,6 +386,14 @@ public partial class MainWindowViewModel : ObservableObject
             ModelName = modelInfo.Model;
             ProviderName = modelInfo.Provider;
             ModelAvailable = modelInfo.Available;
+            IsBackendErrorVisible = false;
+            BackendErrorMessage = string.Empty;
+            _backendRetryDelayMs = 3000;
+        }
+        else
+        {
+            BackendErrorMessage = "Backend not reachable. Check Python backend.";
+            IsBackendErrorVisible = true;
         }
     }
 
@@ -371,23 +468,84 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task RunCurrentFileAsync()
     {
+        var isScratch = false;
+        var filePath = Editor.ActiveTab?.FilePath;
+
+        // If no file is open but there is content, write a scratch file to run
         if (Editor.ActiveTab == null)
         {
-            Messages.Add(new ChatMessage("system", "No file is currently open"));
+            if (string.IsNullOrWhiteSpace(Editor.CurrentFileContent))
+            {
+                BackendErrorMessage = "Open a file or type some code in the editor before running.";
+                IsBackendErrorVisible = true;
+                return;
+            }
+
+            filePath = CreateScratchFile(Editor.CurrentFileContent);
+            isScratch = true;
+        }
+        else
+        {
+            // Auto-save if dirty
+            if (Editor.ActiveTab.IsDirty)
+            {
+                await Editor.SaveActiveTabCommand.ExecuteAsync(null);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            BackendErrorMessage = "Unable to determine a file path to run.";
+            IsBackendErrorVisible = true;
             return;
         }
 
-        // Auto-save if dirty
-        if (Editor.ActiveTab.IsDirty)
+        var fileName = Path.GetFileName(filePath);
+        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+        var commandName = extension switch
         {
-            await Editor.SaveActiveTabCommand.ExecuteAsync(null);
+            ".py" => "python",
+            ".cs" => "dotnet",
+            ".js" => "node",
+            ".ts" => "ts-node",
+            ".sh" => OperatingSystem.IsWindows() ? "bash" : "bash",
+            ".ps1" => "powershell",
+            ".java" => "java",
+            ".rb" => "ruby",
+            ".go" => "go",
+            _ => null
+        };
+
+        if (commandName != null && !IsOnPath(commandName))
+        {
+            BackendErrorMessage = $"Interpreter '{commandName}' not found on PATH. Install it to run {extension} files.";
+            IsBackendErrorVisible = true;
+            return;
         }
 
-        var filePath = Editor.ActiveTab.FilePath;
-        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+        // Ensure there is an active terminal
+        if (TerminalManager.ActiveTerminal == null && TerminalManager.CreateNewTerminalCommand.CanExecute(null))
+        {
+            TerminalManager.CreateNewTerminalCommand.Execute(null);
+        }
+
+        var terminal = TerminalManager.ActiveTerminal;
+        if (terminal == null)
+        {
+            BackendErrorMessage = "No terminal available to run the file.";
+            IsBackendErrorVisible = true;
+            return;
+        }
 
         // Show and focus terminal
         IsTerminalVisible = true;
+
+        // Align terminal working directory to the file's directory
+        var fileDir = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrWhiteSpace(fileDir) && Directory.Exists(fileDir))
+        {
+            terminal.SetWorkingDirectory(fileDir);
+        }
 
         // Determine run command based on file extension
         string? command = extension switch
@@ -404,15 +562,59 @@ public partial class MainWindowViewModel : ObservableObject
             _ => null
         };
 
-        if (command != null && TerminalManager.ActiveTerminal != null)
+        if (command == null)
         {
-            TerminalManager.ActiveTerminal.CurrentCommand = command;
-            await TerminalManager.ActiveTerminal.ExecuteCommandCommand.ExecuteAsync(null);
+            BackendErrorMessage = $"Unable to run {extension} files automatically.";
+            IsBackendErrorVisible = true;
+            return;
         }
-        else
+
+        // Log intent and execute
+        var label = isScratch ? $"{fileName} (scratch)" : fileName;
+        terminal.OutputLines.Add(new TerminalLine($"Running {label} with '{command}'", TerminalLineType.Info));
+        terminal.CurrentCommand = command;
+        await terminal.ExecuteCommandCommand.ExecuteAsync(null);
+    }
+
+    private string? CreateScratchFile(string content)
+    {
+        try
         {
-            Messages.Add(new ChatMessage("system", $"Unable to run {extension} files automatically"));
+            var baseDir = WorkingDirectory;
+            if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir))
+            {
+                baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocLM", "scratch");
+            }
+
+            Directory.CreateDirectory(baseDir);
+
+            var filePath = Path.Combine(baseDir, $"untitled_run_{DateTime.UtcNow:yyyyMMdd_HHmmssfff}.py");
+            File.WriteAllText(filePath, content ?? string.Empty);
+            return filePath;
         }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Run] Failed to create scratch file: {ex.Message}");
+            BackendErrorMessage = "Unable to create a scratch file to run. Check write permissions.";
+            IsBackendErrorVisible = true;
+            return null;
+        }
+    }
+
+    private static bool IsOnPath(string exeName)
+    {
+        var paths = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var p in paths)
+        {
+            try
+            {
+                var candidate = Path.Combine(p, OperatingSystem.IsWindows() ? exeName + ".exe" : exeName);
+                if (File.Exists(candidate))
+                    return true;
+            }
+            catch { }
+        }
+        return false;
     }
 
     [RelayCommand]
@@ -445,25 +647,89 @@ public partial class MainWindowViewModel : ObservableObject
 
             if (folder.Count > 0)
             {
-                var selectedPath = folder[0].Path.LocalPath;
-                WorkingDirectory = selectedPath;
-                await FileExplorer.LoadDirectoryAsync(selectedPath);
+                var selectedPath = NormalizeFolderPath(folder[0]);
+                System.Diagnostics.Debug.WriteLine($"[Workspace] Folder picker returned: {selectedPath}");
 
-                // Set terminal working directory
-                TerminalManager.SetWorkingDirectory(selectedPath);
-
-                // Sync workspace with backend for agent tools
-                try
+                if (!string.IsNullOrWhiteSpace(selectedPath) && Directory.Exists(selectedPath))
                 {
-                    await _agentService.SetWorkspaceAsync(selectedPath);
-                    System.Diagnostics.Debug.WriteLine($"[Workspace] Set backend workspace to: {selectedPath}");
+                    WorkingDirectory = selectedPath;
+                    _fileSystem.SetCurrentDirectory(selectedPath);
+                    System.Diagnostics.Debug.WriteLine($"[Workspace] Loading explorer from {selectedPath}");
+                    await FileExplorer.LoadDirectoryAsync(selectedPath);
+
+                    var childCount = FileExplorer.RootItems.FirstOrDefault()?.Children.Count ?? 0;
+                    System.Diagnostics.Debug.WriteLine($"[Workspace] Explorer items: roots={FileExplorer.RootItems.Count}, children={childCount}, LastLoadSucceeded={FileExplorer.LastLoadSucceeded}");
+
+                    if (!FileExplorer.LastLoadSucceeded || FileExplorer.RootItems.Count == 0)
+                    {
+                        BackendErrorMessage = "Folder loaded but no items were found (may be empty or inaccessible).";
+                        IsBackendErrorVisible = true;
+                    }
+                    else
+                    {
+                        IsBackendErrorVisible = false;
+                        BackendErrorMessage = string.Empty;
+                    }
+
+                    // Set terminal working directory
+                    TerminalManager.SetWorkingDirectory(selectedPath);
+
+                    // Sync workspace with backend for agent tools
+                    try
+                    {
+                        await _agentService.SetWorkspaceAsync(selectedPath);
+                        System.Diagnostics.Debug.WriteLine($"[Workspace] Set backend workspace to: {selectedPath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Workspace] Failed to set backend workspace: {ex.Message}");
+                        BackendErrorMessage = "Opened folder, but failed to sync workspace with backend.";
+                        IsBackendErrorVisible = true;
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Workspace] Failed to set backend workspace: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[Workspace] Selected path does not exist or not local: {selectedPath}");
+                    BackendErrorMessage = "Selected folder is not accessible. Pick a local folder.";
+                    IsBackendErrorVisible = true;
                 }
             }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[Workspace] Folder picker returned no selection.");
+            }
         }
+    }
+
+    private static string? NormalizeFolderPath(IStorageFolder folder)
+    {
+        try
+        {
+            var local = folder.TryGetLocalPath();
+            if (!string.IsNullOrWhiteSpace(local))
+                return Path.GetFullPath(local);
+
+            if (folder.Path != null)
+            {
+                // Handle file:// URIs from the picker
+                var path = folder.Path.LocalPath;
+                if (!string.IsNullOrWhiteSpace(path))
+                    return Path.GetFullPath(path);
+
+                var asString = folder.Path.ToString();
+                if (!string.IsNullOrWhiteSpace(asString) && Uri.IsWellFormedUriString(asString, UriKind.Absolute))
+                    return Path.GetFullPath(new Uri(asString).LocalPath);
+
+                if (!string.IsNullOrWhiteSpace(asString))
+                    return Path.GetFullPath(asString);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Workspace] Failed to normalize folder path: {ex.Message}");
+        }
+
+        return null;
     }
 
     [RelayCommand]
@@ -495,6 +761,20 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ZoomIn()
+    {
+        Editor.IncreaseFontSizeCommand.Execute(null);
+        SaveSettings();
+    }
+
+    [RelayCommand]
+    private void ZoomOut()
+    {
+        Editor.DecreaseFontSizeCommand.Execute(null);
+        SaveSettings();
+    }
+
+    [RelayCommand]
     private void ToggleTerminalMenu()
     {
         IsTerminalMenuOpen = !IsTerminalMenuOpen;
@@ -502,6 +782,18 @@ public partial class MainWindowViewModel : ObservableObject
         IsEditMenuOpen = false;
         IsViewMenuOpen = false;
         IsRunMenuOpen = false;
+    }
+
+    [RelayCommand]
+    private async Task RetryBackendAsync()
+    {
+        await RefreshConnectionAsync();
+    }
+
+    [RelayCommand]
+    private void ToggleBackendError()
+    {
+        IsBackendErrorVisible = false;
     }
 
     private async Task CheckOllamaStatus()

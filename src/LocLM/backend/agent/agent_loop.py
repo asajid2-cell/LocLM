@@ -30,8 +30,8 @@ class AgentLoop:
         # File change tracker for diff view
         self.file_tracker = FileChangeTracker()
 
-        # Provider configuration
-        self.provider = os.getenv("LLM_PROVIDER", "groq")  # groq, ollama, openai
+        # Provider configuration (default to Ollama)
+        self.provider = os.getenv("LLM_PROVIDER", "ollama")  # groq, ollama, openai
         self.groq_api_key = os.getenv("GROQ_API_KEY", "")
         self.groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
         self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")

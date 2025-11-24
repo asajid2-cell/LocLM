@@ -7,6 +7,8 @@
         Title="LocLM"
         Width="1400" Height="850"
         MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        WindowState="Normal"
         Background="{StaticResource BaseBg}"
         CanResize="True"
         SystemDecorations="Full"
@@ -111,10 +113,10 @@
         </Style>
     </Window.Styles>
     <Border Padding="12,8,12,12" Background="{StaticResource BaseBg}">
-        <Grid RowDefinitions="48,*">
+        <Grid RowDefinitions="80,Auto,*">
             <Border Grid.Row="0" Background="#0D0F15" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,120">
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Grid RowDefinitions="40,32" ColumnDefinitions="Auto,*,Auto,Auto,120">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Border Width="24" Height="24" CornerRadius="6" Background="{StaticResource AccentPrimary}">
                             <TextBlock Text="L" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#0b0d11"/>
                         </Border>
@@ -123,14 +125,57 @@
                             <TextBlock Text="{Binding WorkingDirectory}" FontSize="10" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                     </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <Button Classes="ghost" Content="File" Padding="8,6" Command="{Binding ToggleFileMenuCommand}"/>
-                        <Button Classes="ghost" Content="Edit" Padding="8,6" Command="{Binding ToggleEditMenuCommand}"/>
-                        <Button Classes="ghost" Content="View" Padding="8,6" Command="{Binding ToggleViewMenuCommand}"/>
-                        <Button Classes="ghost" Content="Terminal" Padding="8,6" Command="{Binding ToggleTerminalMenuCommand}"/>
-                        <Button Classes="ghost" Content="Run" Padding="8,6" Command="{Binding ToggleRunMenuCommand}"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                    <Menu Grid.Row="0" Grid.Column="1" Background="Transparent" VerticalAlignment="Center">
+                        <MenuItem Header="File">
+                            <MenuItem Header="New Session" Command="{Binding NewSessionCommand}" />
+                            <MenuItem Header="Save File" Command="{Binding Editor.SaveActiveTabCommand}" />
+                            <MenuItem Header="Reload Workspace" Command="{Binding FileExplorer.RefreshCommand}" />
+                            <MenuItem Header="New File" Command="{Binding FileExplorer.CreateFileCommand}" />
+                            <MenuItem Header="New Folder" Command="{Binding FileExplorer.CreateFolderCommand}" />
+                            <MenuItem Header="Open Folder..." Command="{Binding OpenFolderCommand}" />
+                            <MenuItem Header="Recent Files">
+                                <MenuItem.Items>
+                                    <ItemsControl ItemsSource="{Binding Editor.OpenFiles}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <MenuItem Header="{Binding FileName}" Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Editor.OpenFileCommand}" CommandParameter="{Binding FilePath}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </MenuItem.Items>
+                            </MenuItem>
+                            <MenuItem Header="Recent Chats">
+                                <MenuItem.Items>
+                                    <ItemsControl ItemsSource="{Binding ChatHistory.Sessions}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <MenuItem Header="{Binding Title}" Command="{Binding SelectCommand}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </MenuItem.Items>
+                            </MenuItem>
+                        </MenuItem>
+                        <MenuItem Header="Edit">
+                            <MenuItem Header="Toggle Mode" Command="{Binding ToggleModeCommand}" />
+                            <MenuItem Header="Toggle Sidebar" Command="{Binding ToggleSidebarCommand}" />
+                            <MenuItem Header="Settings" Command="{Binding ToggleSettingsCommand}" />
+                        </MenuItem>
+                        <MenuItem Header="View">
+                            <MenuItem Header="Keyboard Shortcuts" Command="{Binding ToggleKeyboardShortcutsCommand}" />
+                            <MenuItem Header="Change Model" Command="{Binding ToggleModelSelectorCommand}" />
+                            <MenuItem Header="Zoom In" Command="{Binding ZoomInCommand}" />
+                            <MenuItem Header="Zoom Out" Command="{Binding ZoomOutCommand}" />
+                        </MenuItem>
+                        <MenuItem Header="Terminal">
+                            <MenuItem Header="Refresh Backend" Command="{Binding RefreshConnectionCommand}" />
+                            <MenuItem Header="Show Terminal" Command="{Binding ToggleTerminalCommand}" />
+                        </MenuItem>
+                        <MenuItem Header="Run">
+                            <MenuItem Header="Run File" Command="{Binding RunCurrentFileCommand}" />
+                        </MenuItem>
+                    </Menu>
+                    <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding ConnectionStatus}">
                             <Ellipse Classes="dot-active" IsVisible="{Binding ModelAvailable}" VerticalAlignment="Center"/>
                             <Ellipse Classes="dot-error" IsVisible="{Binding !ModelAvailable}" VerticalAlignment="Center"/>
@@ -144,15 +189,54 @@
                             </Border>
                         </StackPanel>
                     </StackPanel>
-                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Button Classes="ghost" Command="{Binding ToggleSidebarCommand}"><TextBlock Text="Nav" FontSize="12" Foreground="{StaticResource TextSecondary}"/></Button>
                         <Button Classes="ghost" Command="{Binding RefreshConnectionCommand}"><TextBlock Text="Refresh" FontSize="12" Foreground="{StaticResource TextSecondary}"/></Button>
+                        <Button Classes="ghost" Command="{Binding ToggleModelSelectorCommand}"><TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}"/></Button>
+                        <Button Classes="ghost" Command="{Binding ToggleSettingsCommand}"><TextBlock Text="Settings" FontSize="12" Foreground="{StaticResource TextSecondary}"/></Button>
                     </StackPanel>
                     <!-- Spacer to keep clear of window controls -->
-                    <Border Grid.Column="4"/>
+                    <Border Grid.Row="0" Grid.Column="4"/>
+
+                    <!-- Toolbar row -->
+                    <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Classes="ghost" Command="{Binding FileExplorer.CreateFileCommand}">
+                            <TextBlock Text="New File" FontSize="12"/>
+                        </Button>
+                        <Button Classes="ghost" Command="{Binding FileExplorer.CreateFolderCommand}">
+                            <TextBlock Text="New Folder" FontSize="12"/>
+                        </Button>
+                        <Button Classes="ghost" Command="{Binding FileExplorer.RefreshCommand}">
+                            <TextBlock Text="Refresh Explorer" FontSize="12"/>
+                        </Button>
+                        <Button Classes="ghost" Command="{Binding Editor.SaveActiveTabCommand}">
+                            <TextBlock Text="Save" FontSize="12"/>
+                        </Button>
+                        <Button Classes="ghost" Command="{Binding RunCurrentFileCommand}">
+                            <TextBlock Text="Run" FontSize="12"/>
+                        </Button>
+                        <TextBlock Text="{Binding Editor.ActiveTab.FilePath}" FontSize="11" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="12,0,0,0" Width="300"/>
+                    </StackPanel>
                 </Grid>
             </Border>
-            <Grid Grid.Row="1" ColumnDefinitions="240,*,280" Background="{StaticResource BaseBg}">
+            <!-- Backend error banner -->
+            <Border Grid.Row="1" Background="#321b1b" BorderBrush="#b91c1c" BorderThickness="0,0,0,1" Padding="12,8" IsVisible="{Binding IsBackendErrorVisible}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="Backend connection issue" FontSize="13" FontWeight="SemiBold" Foreground="#f87171"/>
+                        <TextBlock Text="{Binding BackendErrorMessage}" FontSize="11" Foreground="#fca5a5" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <Button Classes="ghost" Command="{Binding RetryBackendCommand}" Padding="10,6" Background="#3b82f6" BorderBrush="#3b82f6" CornerRadius="6">
+                            <TextBlock Text="Retry" FontWeight="SemiBold" Foreground="#0b0d11"/>
+                        </Button>
+                        <Button Classes="ghost" Command="{Binding ToggleBackendErrorCommand}" Padding="10,6">
+                            <TextBlock Text="Hide" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <Grid Grid.Row="2" ColumnDefinitions="240,*,280" Background="{StaticResource BaseBg}">
                 <Border Grid.Column="0" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,1,0" IsVisible="{Binding ShowSidebar}">
                     <Grid RowDefinitions="44,*,200,44">
                         <Border Grid.Row="0" Background="#12141B" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="10,0">
@@ -177,6 +261,11 @@
                                     </StackPanel>
                                 </Border>
                                 <ItemsControl ItemsSource="{Binding FileExplorer.RootItems}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
                                     <ItemsControl.DataTemplates>
                                         <DataTemplate DataType="{x:Type vm:FileTreeItem}">
                                             <StackPanel>
@@ -190,7 +279,13 @@
                                                         </StackPanel>
                                                     </Grid>
                                                 </Button>
-                                                <ItemsControl ItemsSource="{Binding Children}" IsVisible="{Binding IsExpanded}" Margin="0"/>
+                                                <ItemsControl ItemsSource="{Binding Children}" IsVisible="{Binding IsExpanded}" Margin="0">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <VirtualizingStackPanel/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                </ItemsControl>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.DataTemplates>
@@ -202,6 +297,11 @@
                                 <TextBlock Grid.Row="0" Text="RECENT" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="8,6"/>
                                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="6,0">
                                     <ItemsControl ItemsSource="{Binding ChatHistory.Sessions}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Button Classes="sidebar-item" Command="{Binding SelectCommand}">
@@ -259,17 +359,15 @@
                             </StackPanel>
                         </Border>
                         <Border Grid.Row="1" Background="{StaticResource BaseBg}">
-                            <Grid>
+                            <Grid RowDefinitions="*,Auto">
                                 <ScrollViewer IsVisible="{Binding IsEditorView, Converter={StaticResource InvertBool}}" VerticalScrollBarVisibility="Auto" Padding="18,16" HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel Spacing="12">
-                                        <Border Padding="18" Background="#10131c" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="10" IsVisible="{Binding Messages.Count, Converter={StaticResource CountIsZero}}">
-                                            <StackPanel HorizontalAlignment="Center" Spacing="6">
-                                                <Border Width="56" Height="56" Background="#141824" CornerRadius="16"/>
-                                                <TextBlock Text="Start a conversation" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                                                <TextBlock Text="Ask about your codebase or run a tool" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center" FontSize="12"/>
-                                            </StackPanel>
-                                        </Border>
                                         <ItemsControl ItemsSource="{Binding Messages}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <VirtualizingStackPanel/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ChatMessage">
                                                     <Grid Margin="0,6">
@@ -295,6 +393,13 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
+                                        <Border Padding="18" Background="#10131c" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="10" IsVisible="{Binding Messages.Count, Converter={StaticResource CountIsZero}}">
+                                            <StackPanel HorizontalAlignment="Center" Spacing="6">
+                                                <Border Width="56" Height="56" Background="#141824" CornerRadius="16"/>
+                                                <TextBlock Text="Start a conversation" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="Ask about your codebase or run a tool" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center" FontSize="12"/>
+                                            </StackPanel>
+                                        </Border>
                                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsLoading}">
                                             <Border Width="16" Height="16" CornerRadius="8" Background="#3b82f6" Opacity="0.8"/>
                                             <TextBlock Text="Thinking..." Foreground="{StaticResource TextSecondary}"/>
@@ -320,8 +425,7 @@
                                                 </ItemsControl>
                                             </StackPanel>
                                             <Button Grid.Column="1" Classes="ghost" Command="{Binding RunCurrentFileCommand}"
-                                                    Padding="12,6" Margin="8,0" Background="#22c55e20" BorderBrush="#22c55e40" BorderThickness="1" CornerRadius="6"
-                                                    IsEnabled="{Binding Editor.HasOpenTabs}">
+                                                    Padding="12,6" Margin="8,0" Background="#22c55e20" BorderBrush="#22c55e40" BorderThickness="1" CornerRadius="6">
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                                     <TextBlock Text="▶" FontSize="11" Foreground="#22c55e" VerticalAlignment="Center"/>
                                                     <TextBlock Text="Run" FontSize="12" Foreground="#22c55e"/>
@@ -331,11 +435,11 @@
                                         </Border>
                                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                                             <Grid ColumnDefinitions="40,*" Background="#0d0f15">
-                                                <Border Grid.Column="0" Padding="6,2" Background="#0f1117" BorderBrush="#11141d" BorderThickness="0,0,1,0">
+                                                <Border Grid.Column="0" Padding="6,2" Background="#0f1117" BorderBrush="#11141d" BorderThickness="0,0,1,0" IsVisible="{Binding Editor.ShowLineNumbers}">
                                                     <TextBlock Text="{Binding Editor.LineNumbers}" Foreground="{StaticResource TextMuted}" FontSize="11" HorizontalAlignment="Right" TextWrapping="Wrap"/>
                                                 </Border>
                                                 <TextBox Grid.Column="1" Text="{Binding Editor.CurrentFileContent, Mode=TwoWay}"
-                                                         FontFamily="JetBrains Mono, Consolas, monospace" FontSize="12"
+                                                         FontFamily="JetBrains Mono, Consolas, monospace" FontSize="{Binding Editor.EditorFontSize}"
                                                          AcceptsReturn="True" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                                          Background="#0f1117" Foreground="{StaticResource TextPrimary}" BorderBrush="#1d2230" BorderThickness="0"
                                                          Padding="10" TextWrapping="Wrap"/>
@@ -343,6 +447,7 @@
                                         </ScrollViewer>
                                     </Grid>
                                 </Grid>
+
                             </Grid>
                         </Border>
 
@@ -489,26 +594,30 @@
                                     <TextBlock Text="TOOLS" Classes="label"/>
                                     <UniformGrid Columns="2" Rows="2" Margin="0,4,0,0">
                                         <Border Classes="tool-block" Margin="4">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <TextBlock Text="[]" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Path Width="14" Height="14" Fill="{StaticResource TextSecondary}"
+                                                      Data="M3,1 L9,1 L13,5 L13,15 L3,15 Z M9,1 L9,5 L13,5" Stretch="Uniform"/>
                                                 <TextBlock Text="read_file" FontSize="12"/>
                                             </StackPanel>
                                         </Border>
                                         <Border Classes="tool-block" Margin="4">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <TextBlock Text="[]" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Path Width="14" Height="14" Fill="{StaticResource TextSecondary}"
+                                                      Data="M2,2 L12,2 L12,12 L8,12 L6,14 L6,12 L2,12 Z" Stretch="Uniform"/>
                                                 <TextBlock Text="write_file" FontSize="12"/>
                                             </StackPanel>
                                         </Border>
                                         <Border Classes="tool-block" Margin="4">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <TextBlock Text="[]" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Path Width="14" Height="14" Fill="{StaticResource TextSecondary}"
+                                                      Data="M2,4 L6,4 L7,6 L13,6 L13,14 L2,14 Z" Stretch="Uniform"/>
                                                 <TextBlock Text="list_directory" FontSize="12"/>
                                             </StackPanel>
                                         </Border>
                                         <Border Classes="tool-block" Margin="4">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <TextBlock Text="[]" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Path Width="14" Height="14" Fill="{StaticResource TextSecondary}"
+                                                      Data="M8,1 L4,9 L7,9 L6,15 L12,7 L9,7 Z" Stretch="Uniform"/>
                                                 <TextBlock Text="run_command" FontSize="12"/>
                                             </StackPanel>
                                         </Border>
@@ -614,6 +723,12 @@
                                         <TextBlock Text="EDITOR" Classes="label"/>
                                         <Border Background="#12141b" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="16">
                                             <StackPanel Spacing="12">
+                                                <CheckBox Content="Show sidebar" IsChecked="{Binding ShowSidebar}" Foreground="{StaticResource TextPrimary}"/>
+                                                <CheckBox Content="Show line numbers" IsChecked="{Binding Editor.ShowLineNumbers}" Foreground="{StaticResource TextPrimary}"/>
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="Editor font size" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                                                    <Slider Minimum="10" Maximum="18" Value="{Binding Editor.EditorFontSize}" Width="180"/>
+                                                </StackPanel>
                                                 <Grid ColumnDefinitions="*,Auto">
                                                     <StackPanel Grid.Column="0" Spacing="4">
                                                         <TextBlock Text="Vim Mode" FontSize="13" FontWeight="Medium"/>
@@ -812,4 +927,3 @@
         </Grid>
     </Border>
 </Window>
-
